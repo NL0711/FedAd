@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://fedad.onrender.com/api/:path*" },
+    { "source": "/v1/:path*", "destination": "https://fedad.onrender.com/v1/:path*" },
+    { "source": "/figures/:path*", "destination": "https://fedad.onrender.com/figures/:path*" }
+  ]
+}
