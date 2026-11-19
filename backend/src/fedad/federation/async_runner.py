@@ -18,14 +18,13 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from ..aggregation import compress
 from ..ml.data import ClientData
 from .pipeline import Config, Result, Setup, Upload, evaluate
 
 
 def run_async(clients: Sequence[ClientData], cfg: Config, n_features: int, model=None, buffer_k: int = 4,
               mean_durations: Optional[Dict[int, float]] = None, max_versions: Optional[int] = None,
-              eval_split: str = "test") -> Result:
+              eval_split: str = "test", on_round=None) -> Result:
     s = Setup(clients, cfg, n_features, model)
     rng = np.random.default_rng([cfg.seed, 7])
     base = mean_durations or {c.client_id: float(np.exp(rng.normal(0.0, 0.7))) for c in clients}
@@ -63,7 +62,10 @@ def run_async(clients: Sequence[ClientData], cfg: Config, n_features: int, model
                "rejected": {k: v for r in results for k, v in r.rejected.items()},
                "not_run": sorted({m for r in results for m in r.not_run})}
         row.update(evaluate(s.model, s.w, clients, cfg.attackers, eval_split))
+        row.update(s.privacy_so_far())
         history.append(row)
+        if on_round:
+            on_round(row)
         buffer = []
 
     while heap and (max_versions is None or version < max_versions):
@@ -82,4 +84,4 @@ def run_async(clients: Sequence[ClientData], cfg: Config, n_features: int, model
             flush()
     if max_versions is None or version < max_versions:
         flush()
-    return Result(s.w, history, s.acct.report(), s.sigma, compress.dense_bytes(s.model.n_params))
+    return s.result(history)

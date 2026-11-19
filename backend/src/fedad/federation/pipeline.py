@@ -23,7 +23,7 @@ import numpy as np
 from ..aggregation import aggregate, compress, robust
 from ..ml.data import ClientData
 from ..ml.model import Model, auc
-from ..privacy import dp, he, secagg
+from ..privacy import dp, he, rdp, secagg
 
 
 @dataclass
@@ -38,6 +38,7 @@ class Config:
     eps_total: float = 2.0
     delta_total: float = 1e-5
     budget_mode: str = "uniform"   # uniform | paper
+    accountant: str = "basic"      # basic (sum of per-round epsilons) | rdp (Renyi composition, needs budget_mode uniform)
     n_edges: int = 2
     secure_agg: bool = False       # additive secret sharing across k servers
     k_servers: int = 3
@@ -135,11 +136,12 @@ class Edge:
 class Result:
     w: np.ndarray
     history: List[dict]
-    accountant: Dict[int, tuple]
+    accountant: Dict[int, tuple]          # per client (eps, delta) under the accountant the run was configured with
     sigma_by_client: Dict[int, float]
     dense_bytes_per_upload: int
     synthetic: bool = True
     prototype: bool = True
+    accountant_rdp: Dict[int, tuple] = field(default_factory=dict)   # same releases, tighter Renyi bound at delta_total
 
 
 def evaluate(model, w: np.ndarray, clients: Sequence[ClientData], skip: Set[int], split: str = "test") -> Dict[str, float]:
@@ -159,13 +161,21 @@ class Setup:
         self.cfg = cfg
         self.model = model if model is not None else Model(n_features)
         self.w = self.model.init()
+        if cfg.accountant not in ("basic", "rdp"):
+            raise ValueError("accountant must be 'basic' or 'rdp'")
+        if cfg.accountant == "rdp" and cfg.budget_mode != "uniform":
+            raise ValueError("the rdp accountant needs budget_mode='uniform' (one sigma for every release)")
         self.eps_it = dp.allocate_budget(cfg.eps_total, cfg.rounds, [c.n for c in clients], mode=cfg.budget_mode)
         self.delta_round = cfg.delta_total / cfg.rounds
         self.sigma: Dict[int, float] = {}
-        if cfg.dp:
+        if cfg.dp and cfg.accountant == "rdp":
+            sig = rdp.calibrate_sigma(cfg.eps_total, cfg.delta_total, 2.0 * cfg.clip_c, cfg.rounds)
+            self.sigma = {c.client_id: sig for c in clients}
+        elif cfg.dp:
             self.sigma = {c.client_id: dp.calibrate_sigma(float(e), self.delta_round, 2.0 * cfg.clip_c)
                           for c, e in zip(clients, self.eps_it)}
         self.eps_of = {c.client_id: float(e) for c, e in zip(clients, self.eps_it)}
+        self.releases: Dict[int, int] = {}
         self.clients = [Client(c, self.model, cfg, self.sigma.get(c.client_id, 0.0)) for c in clients]
         self.edges = [Edge(cfg, self.model.n_params) for _ in range(cfg.n_edges)]
         self.acct = dp.Accountant(self.delta_round)
@@ -187,12 +197,36 @@ class Setup:
     def spend(self, client_id: int) -> None:
         if self.cfg.dp and client_id not in self.cfg.attackers:
             self.acct.spend(client_id, self.eps_of[client_id])
+            self.releases[client_id] = self.releases.get(client_id, 0) + 1
+
+    def privacy_so_far(self) -> Dict[str, float]:
+        """Worst-client epsilon spent so far under both accountants (zeros without DP)."""
+        if not self.cfg.dp or not self.releases:
+            return {"eps_basic": 0.0, "eps_rdp": 0.0}
+        rd = self.rdp_report()
+        if self.cfg.accountant == "rdp":
+            basic = max(rd[c][0] for c in rd)           # the run's own number is the Renyi one; basic would be loose
+        else:
+            basic = max(e for e, _ in self.acct.report().values())
+        return {"eps_basic": basic, "eps_rdp": max(e for e, _ in rd.values())}
+
+    def rdp_report(self) -> Dict[int, tuple]:
+        """Renyi bound for the releases made so far (the sigmas actually used), at delta_total."""
+        return {c: (rdp.eps_after(self.sigma[c], 2.0 * self.cfg.clip_c, n, self.cfg.delta_total), self.cfg.delta_total)
+                for c, n in self.releases.items()}
+
+    def result(self, history: List[dict]) -> Result:
+        report = self.rdp_report() if self.cfg.accountant == "rdp" else self.acct.report()
+        return Result(self.w, history, report, self.sigma, compress.dense_bytes(self.model.n_params),
+                      accountant_rdp=self.rdp_report() if self.cfg.dp else {})
 
     def edge_of(self, client_id: int) -> int:
         return client_id % self.cfg.n_edges
 
 
-def run(clients: Sequence[ClientData], cfg: Config, n_features: int, model=None, eval_split: str = "test") -> Result:
+def run(clients: Sequence[ClientData], cfg: Config, n_features: int, model=None, eval_split: str = "test",
+        on_round=None) -> Result:
+    """``on_round(row)`` is called after every round with that round's history row (used by the dashboard)."""
     s = Setup(clients, cfg, n_features, model)
     history = []
     for rnd in range(cfg.rounds):
@@ -205,5 +239,8 @@ def run(clients: Sequence[ClientData], cfg: Config, n_features: int, model=None,
                "rejected": {k: v for r in results for k, v in r.rejected.items()},
                "not_run": sorted({m for r in results for m in r.not_run})}
         row.update(evaluate(s.model, s.w, clients, cfg.attackers, eval_split))
+        row.update(s.privacy_so_far())
         history.append(row)
-    return Result(s.w, history, s.acct.report(), s.sigma, compress.dense_bytes(s.model.n_params))
+        if on_round:
+            on_round(row)
+    return s.result(history)

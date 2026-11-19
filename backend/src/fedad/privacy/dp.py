@@ -27,7 +27,14 @@ def gaussian_delta(sigma: float, eps: float, sensitivity: float) -> float:
     """Exact delta of the Gaussian mechanism with noise std ``sigma`` (Balle and Wang 2018, Theorem 8)."""
     a = sensitivity / (2.0 * sigma)
     b = eps * sigma / sensitivity
-    return _phi(a - b) - math.exp(eps) * _phi(-a - b)
+    return _phi(a - b) - math.exp(min(eps + _log_phi_neg(a + b), 700.0))      # log space: exp(eps) alone overflows past 709
+
+
+def _log_phi_neg(x: float) -> float:
+    """log Phi(-x) for x >= 0, stable for large x (the plain erfc underflows past x about 38)."""
+    if x < 20.0:
+        return math.log(0.5 * math.erfc(x / math.sqrt(2.0)))
+    return -x * x / 2.0 - math.log(x) - 0.5 * math.log(2.0 * math.pi) + math.log1p(-1.0 / (x * x) + 3.0 / x ** 4)
 
 
 def calibrate_sigma(eps: float, delta: float, sensitivity: float) -> float:

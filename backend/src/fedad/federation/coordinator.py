@@ -20,7 +20,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from ..privacy import dp, he, secagg
+from ..privacy import dp, he, rdp, secagg
 from .pipeline import Config, Edge, Upload
 
 
@@ -51,9 +51,16 @@ class Coordinator:
     def policy(self) -> dict:
         """What a client must follow. A client enforces its own epsilon ceiling and must not trust this blindly."""
         c = self.cfg
+        sigma = 0.0
+        if c.dp:                      # the noise std (absolute, on the clipped update) the client must add per upload
+            if c.accountant == "rdp":
+                sigma = rdp.calibrate_sigma(c.eps_total, c.delta_total, 2.0 * c.clip_c, c.rounds)
+            else:
+                sigma = dp.calibrate_sigma(c.eps_total / c.rounds, c.delta_total / c.rounds, 2.0 * c.clip_c)
         return {"clip_c": c.clip_c, "top_k": c.top_k, "dp": c.dp, "eps_per_upload": c.eps_total / c.rounds,
                 "delta_per_upload": c.delta_total / c.rounds, "max_uploads": c.rounds, "local_epochs": c.local_epochs,
-                "lr": c.lr, "batch": c.batch}
+                "lr": c.lr, "batch": c.batch, "sigma": sigma, "accountant": c.accountant, "eps_total": c.eps_total,
+                "delta_total": c.delta_total}
 
     def model(self) -> dict:
         with self.lock:
