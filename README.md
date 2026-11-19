@@ -31,6 +31,23 @@ FEDAD_TOKENS="<token>:0,<token>:1" python -m fedad.api --port 8080     # HTTP co
 python -m fedad.demo --deep             # older single-seed table -> results/demo.json
 ```
 
+## Deploy on Render (backend and both web pages in one service)
+
+1. Commit and push this repo to GitHub (the Criteo data stays out; `deploy/results/` ships the aggregate results the console shows).
+2. Render: New, Blueprint, pick the repo. `render.yaml` and the `Dockerfile` do the rest (builds the React pages, runs FastAPI).
+3. No admin login: `render.yaml` sets `FEDAD_OPEN_ADMIN=1`, so anyone with the URL can open the console and reset the campaign. Demo only; remove that variable to make the admin endpoints localhost-only again.
+4. Admin console: `https://<service>.onrender.com/`. Phone shop: `https://<service>.onrender.com/phone.html`. Logs tab: the proof lines (`docs/phone_demo.md`).
+
+Free instances sleep after idle time and lose all state on restart (campaign, accounts, model): wake it before the demo. The shop keeps
+emails and passwords in memory: use throwaway ones. Benchmark runs (Criteo) are not available on the deployed service, only the saved results.
+
+## Android app (`mobile/`)
+
+A Flutter shell around the phone shop, signed with a release key. `cd mobile && flutter build apk --release` writes
+`build/app/outputs/flutter-apk/app-release.apk`. First launch asks for the server address (the Render URL, or `192.168.x.x:8000` on
+the same Wi-Fi); triple-tap the top-left corner to change it. Keep `mobile/android/app/perks-release.jks` and `key.properties`: they
+are not committed, and a lost key means a new APK cannot update an installed one.
+
 ## Federated runtime: Flower, and what this repo adds to it
 
 `fedad/flower_engine.py` runs the pipeline on **Flower 1.44** (ServerApp / ClientApp, Simulation Runtime on Ray). Flower
