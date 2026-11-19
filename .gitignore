@@ -11,3 +11,7 @@ data/
 *.egg-info/
 # third-party paper: kept locally, not redistributed from this repo
 *.pdf
+# built Android app and its signing key (share the APK directly, never commit the key)
+*.apk
+mobile/build/
+mobile/.dart_tool/

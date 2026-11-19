@@ -1,5 +1,5 @@
 # Render Blueprint: one web service runs the backend and serves both web pages.
-# Admin endpoints need FEDAD_ADMIN_KEY (generated on first deploy; read it in the Render dashboard, Environment tab).
+# DEMO: the admin endpoints have no login (FEDAD_OPEN_ADMIN=1); anyone with the URL can use the console and reset the campaign.
 services:
   - type: web
     name: fedad
@@ -7,5 +7,5 @@ services:
     plan: free
     healthCheckPath: /healthz
     envVars:
-      - key: FEDAD_ADMIN_KEY
-        generateValue: true
+      - key: FEDAD_OPEN_ADMIN
+        value: "1"

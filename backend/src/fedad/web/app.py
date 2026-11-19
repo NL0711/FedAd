@@ -156,19 +156,19 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
 _LOCAL = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
-ADMIN_KEY = os.environ.get("FEDAD_ADMIN_KEY", "")
+OPEN_ADMIN = os.environ.get("FEDAD_OPEN_ADMIN") == "1"      # DEMO DEPLOYMENT ONLY: no login on the admin endpoints
 
 
 @app.middleware("http")
 async def admin_is_local_only(request: Request, call_next):
-    """Admin and experiment endpoints (/api/*) answer only to the machine running the server, or, when FEDAD_ADMIN_KEY is
-    set (a deployment), to a caller that sends it as X-Admin-Key. Phones may reach /v1/* (the device contract) and the
-    static pages, nothing else. A request that came through a proxy (X-Forwarded-For) is never treated as local."""
-    if request.url.path.startswith("/api"):
+    """Admin and experiment endpoints (/api/*) answer only to the machine running the server, unless FEDAD_OPEN_ADMIN=1
+    (the public demo deployment), when anyone who can reach the server may call them, including the campaign reset. Phones
+    may reach /v1/* (the device contract) and the static pages. A request that came through a proxy (X-Forwarded-For) is
+    never treated as local."""
+    if request.url.path.startswith("/api") and not OPEN_ADMIN:
         local = request.client is not None and request.client.host in _LOCAL and "x-forwarded-for" not in request.headers
-        key_ok = bool(ADMIN_KEY) and hmac.compare_digest(request.headers.get("x-admin-key", ""), ADMIN_KEY)
-        if not (local or key_ok):
-            return JSONResponse({"error": "admin endpoints need localhost or the admin key"}, status_code=403)
+        if not local:
+            return JSONResponse({"error": "admin endpoints answer only to localhost"}, status_code=403)
     return await call_next(request)
 
 
