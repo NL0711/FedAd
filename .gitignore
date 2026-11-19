@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.env
+results/
+*.egg-info/
+# third-party paper: kept locally, not redistributed from this repo
+*.pdf
