@@ -4,6 +4,10 @@ __pycache__/
 .pytest_cache/
 .env
 results/
+# the small precomputed results the deployed image serves (Dockerfile copies it)
+!deploy/results/
+# downloaded Criteo files and the prepared sample (licence CC BY-NC-SA, not redistributed from this repo)
+data/
 *.egg-info/
 # third-party paper: kept locally, not redistributed from this repo
 *.pdf

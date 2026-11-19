@@ -1,0 +1,11 @@
+# Render Blueprint: one web service runs the backend and serves both web pages.
+# Admin endpoints need FEDAD_ADMIN_KEY (generated on first deploy; read it in the Render dashboard, Environment tab).
+services:
+  - type: web
+    name: fedad
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: FEDAD_ADMIN_KEY
+        generateValue: true
