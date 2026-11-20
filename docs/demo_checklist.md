@@ -22,12 +22,13 @@ Addresses
 
 1. **Install and join, no code.** Open the extension popup and tick "I agree". There is no prompt for the server.
    - Expect: the popup shows "Connected". Admin Campaign page shows "Devices joined" go up by one.
-2. **Allow sites one by one.** Open a site from the list below, open the popup, press "Allow this site", approve the browser prompt.
-   The popup closes while the prompt is open; that is normal. Open it again.
-   - Expect: the site is in the list with its counts. A site you did not allow records nothing (try one and show the count stays 0).
-3. **Browse like a normal person.** On each allowed site, stay on a page for 4 seconds, then click an article or link. Repeat on several pages.
-   - Each page held for 3 seconds is one view. A click on a link afterwards is one tap. You need **20 views and 2 taps** in total.
-   - Expect: the popup shows views and taps per site, kept on this computer.
+2. **Say what it reads.** The extension runs on every page (Chrome's install prompt says it can read data on all websites; that is the
+   permission it needs to read each page's title and headings on the device). Pages with a password or card field are skipped, and the
+   demo's own admin and server pages are excluded. A site can be blocked in Chrome: `chrome://extensions`, Details, Site access.
+3. **Browse like a normal person.** Open pages from the list below, stay on each for 3 seconds, then click an article or link. Repeat on several pages.
+   - A page open for 2.5 seconds, whose topic is recognised, is one view. A click on a link, button or anything clickable is one tap
+     (one per page). You need **20 views and 2 taps** in total.
+   - Expect: the popup shows the page and click counts, kept on this computer.
 4. **Show the local model.** DevTools for the extension: `chrome://extensions`, click "service worker" under the extension, Application tab,
    Extension storage, Local. `events` is the local cache of what was seen. After step 5, `localModel` holds the local weights next to
    the server weights it started from.
@@ -66,7 +67,7 @@ views go up.
 Not guessed (the page title is too generic, or the site blocked the check): gsmarena.com, theverge.com, cnet.com, xda-developers.com,
 ign.com, gamespot.com, fifa.com, espn.in, booking.com, makemytrip.com, investopedia.com, allrecipes.com, seriouseats.com.
 
-Quick route to 20 views: allow 4 or 5 sites from different topics, open 4 article pages on each, hold each page 4 seconds, click one
+Quick route to 20 views: open 4 or 5 sites from different topics, open 4 article pages on each, hold each page 3 seconds, click one
 link on at least two of them.
 
 ## D. If something does not work
@@ -74,8 +75,8 @@ link on at least two of them.
 | Symptom | Likely cause and fix |
 |---|---|
 | Popup stays on "Connecting..." | The server is asleep or redeploying. Open `/healthz`, wait, press "Try again". |
-| No update is sent | Needs 20 views and 2 taps first, then 5 new views and a minute between updates. Keep browsing allowed sites. |
-| Views stay at 0 on an allowed site | Reload the site after allowing it. The page may not be guessable (see the "not guessed" list). |
+| No update is sent | Needs 20 views and 2 taps first, then 5 new views and a minute between updates. Keep browsing. |
+| Views stay at 0 on a site | Reload the page once after installing. The page may not be guessable (see the "not guessed" list), or it has a password field. |
 | Model tab says "Waiting for an update" | No device has contributed since the last restart or new campaign. |
 | Admin console is empty after a restart | `DATABASE_URL` is not set on Render, so nothing was saved. |
 | Phone | Chrome on Android cannot run extensions. Use Firefox for Android (see `docs/android-extension-browsers.md`). Untested. |

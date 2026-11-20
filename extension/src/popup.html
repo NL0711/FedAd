@@ -5,16 +5,13 @@
   <h1>FedAd Contributor</h1>
 
   <section id="consent">
-    <p>Learns what you are interested in on the sites you allow, on this device. Only a clipped, noised model update is ever sent: no pages,
-    no site names.</p>
+    <p>Reads the pages you open, on this device only, to learn which topics you click on. Only a clipped, noised model update is ever sent:
+    no pages, no addresses, no site names.</p>
     <label class="row"><input type="checkbox" id="agree"> I agree</label>
   </section>
 
   <section id="main" hidden>
     <p id="status"></p>
-    <label>Site address <input id="site" placeholder="https://example.com"></label>
-    <button id="allow">Allow this site</button>
-    <ul id="sites"></ul>
     <p id="msg" role="status"></p>
     <button id="retry" hidden>Try again</button>
     <button id="wipe" class="danger">Delete my data</button>

@@ -1,11 +1,12 @@
-// Content script, injected only on the campaign server's own pages and on sites the user explicitly allowed one by one. On tagged
-// cards (data-fedad-cat / data-fedad-placement) a card counts as VIEWED when 60% is visible for 400 ms, and as TAPPED when clicked.
-// On other allowed sites a page counts as one view with an on-device topic guess (see classify.ts).
-// Each event is turned into the phone-schema features here and handed to the background worker; nothing leaves the browser.
+// Content script, run on every page. A page counts as ONE view once it has been open and visible for DWELL_MS and its topic could be
+// guessed on this device (classify.ts). A click on anything clickable counts as the tap for that view, even before the dwell time is up
+// (the page is classified at that moment). Each event is turned into the phone-schema features here and handed to the background worker;
+// nothing leaves the browser. Pages with a password or card field are skipped entirely, and nothing about the page (text, address, site
+// name) is kept: only the topic label, the hour, the device type and a few timing numbers.
 import type { Ev } from "./features.ts";
 import { classifyPage } from "./classify.ts";
 
-const MIN_VISIBLE = 0.6, DWELL_MS = 400;
+const DWELL_MS = 2500;
 const t0 = Date.now();
 let position = 0, lastDwell = 3, lastTap = 0;
 const tapTimes: number[] = [];
@@ -24,14 +25,13 @@ const deviceIndex = () => {
 const netQuality = () =>
   ({ "slow-2g": 0, "2g": 1, "3g": 2, "4g": 3 } as Record<string, number>)[(navigator as any).connection?.effectiveType ?? ""] ?? 2;
 
-interface Track { first: number; timer?: number; ev?: Ev; shownAt?: number }
-const tracks = new WeakMap<Element, Track>();
+const sensitive = () => !!document.querySelector('input[type="password"], input[autocomplete^="cc-"], input[name*="card" i]');
 
-function record(cat: string, placement: string, visibleMs: number): Ev {
+function record(cat: string, visibleMs: number, tapped: boolean): Ev {
   const now = new Date();
   const ev: Ev = {
-    id: Date.now() * 1000 + Math.floor(Math.random() * 1000), t: Date.now(), cat, placement, hour: Math.floor(now.getHours() / 4), dev: deviceIndex(), y: 0,
-    site: location.hostname,
+    id: Date.now() * 1000 + Math.floor(Math.random() * 1000), t: Date.now(), cat, placement: "feed-middle", hour: Math.floor(now.getHours() / 4),
+    dev: deviceIndex(), y: tapped ? 1 : 0,
     raw: {
       recency_min: lastTap ? Math.min(60, (Date.now() - lastTap) / 60000) : 60,
       taps_24h: tapTimes.filter((t) => Date.now() - t < 864e5).length,
@@ -42,67 +42,56 @@ function record(cat: string, placement: string, visibleMs: number): Ev {
     },
   };
   position++;
+  if (tapped) { lastTap = Date.now(); tapTimes.push(lastTap); }
   void chrome.runtime.sendMessage({ type: "event", ev });
   return ev;
 }
 
-const io = new IntersectionObserver((list) => {
-  for (const en of list) {
-    const el = en.target as HTMLElement, t = tracks.get(el);
-    if (!t) continue;
-    if (en.intersectionRatio > 0 && !t.first) t.first = performance.now();
-    if (en.intersectionRatio >= MIN_VISIBLE && !t.ev && t.timer === undefined) {
-      t.timer = window.setTimeout(() => {
-        t.timer = undefined;
-        if (document.visibilityState !== "visible" || t.ev) return;
-        t.ev = record(el.dataset.fedadCat!, el.dataset.fedadPlacement ?? "feed-middle", performance.now() - t.first);
-        t.shownAt = performance.now();
-      }, DWELL_MS);
-    } else if (en.intersectionRatio < MIN_VISIBLE) {
-      if (t.timer !== undefined) { clearTimeout(t.timer); t.timer = undefined; }
-      if (t.shownAt) { lastDwell = (performance.now() - t.shownAt) / 1000; t.shownAt = undefined; }
-    }
-  }
-}, { threshold: [0, MIN_VISIBLE] });
+// ---- one view per page ------------------------------------------------------------------------------------------------------
+// Single-page apps change the path without a reload, so the path is watched and each new path is a new page.
+let pageKey = "", pageStart = 0, pageTimer: number | undefined, pageEv: Ev | undefined;
 
-function attach(el: HTMLElement) {
-  if (tracks.has(el) || !el.dataset.fedadCat) return;
-  const t: Track = { first: 0 };
-  tracks.set(el, t);
-  io.observe(el);
-  el.addEventListener("click", () => {
-    const ev = t.ev ?? (t.ev = record(el.dataset.fedadCat!, el.dataset.fedadPlacement ?? "feed-middle", 400));
-    lastTap = Date.now(); tapTimes.push(lastTap);
-    void chrome.runtime.sendMessage({ type: "tap", id: ev.id });
-  });
-}
-
-// ---- other sites the user allowed: one on-device guess per page --------------------------------------------------------------
-// A page with no tagged cards counts as ONE view once it has been visible for PAGE_DWELL_MS and its topic could be guessed. A click
-// on a link or button afterwards counts as the tap for that view. Single-page apps are handled by watching the path.
-const PAGE_DWELL_MS = 3000;
-let pageKey = "", pageTimer: number | undefined, pageEv: Ev | undefined;
 function startPage() {
   pageKey = location.pathname + location.search;
+  pageStart = performance.now();
   pageEv = undefined;
   if (pageTimer !== undefined) clearTimeout(pageTimer);
-  pageTimer = window.setTimeout(() => {
-    pageTimer = undefined;
-    if (document.visibilityState !== "visible" || document.querySelector("[data-fedad-cat]")) return;   // tagged sites use their own cards
-    const cat = classifyPage();
-    if (cat) pageEv = record(cat, "feed-middle", PAGE_DWELL_MS);
-  }, PAGE_DWELL_MS);
+  pageTimer = window.setTimeout(viewNow, DWELL_MS);
 }
-document.addEventListener("click", (e) => {
-  if (!pageEv || pageEv.y === 1 || !(e.target as Element | null)?.closest?.("a[href], button")) return;
-  pageEv.y = 1; lastTap = Date.now(); tapTimes.push(lastTap);
-  void chrome.runtime.sendMessage({ type: "tap", id: pageEv.id });
-}, true);
+function viewNow() {
+  pageTimer = undefined;
+  if (pageEv) return;
+  if (document.visibilityState !== "visible") { pageTimer = window.setTimeout(viewNow, 1000); return; }   // count it once the tab is in front
+  if (sensitive()) return;
+  const cat = classifyPage();
+  if (cat) pageEv = record(cat, performance.now() - pageStart, false);
+}
+
+// ---- taps --------------------------------------------------------------------------------------------------------------------
+const CLICKABLE = 'a[href], button, [role="button"], [role="link"], [role="tab"], [role="menuitem"], input[type="submit"], input[type="button"], summary, [onclick]';
+function clickable(e: Event): boolean {
+  for (const n of e.composedPath().slice(0, 8)) {                      // composedPath also crosses shadow DOM
+    if (!(n instanceof Element)) continue;
+    if (n.matches(CLICKABLE) || getComputedStyle(n).cursor === "pointer") return true;
+  }
+  return false;
+}
+function onClick(e: Event) {
+  if (!e.isTrusted || !clickable(e)) return;                           // a real user click on something clickable
+  if (pageEv) {
+    if (pageEv.y === 1) return;                                        // one tap per page view
+    pageEv.y = 1; lastTap = Date.now(); tapTimes.push(lastTap);
+    void chrome.runtime.sendMessage({ type: "tap", id: pageEv.id });
+    return;
+  }
+  if (sensitive()) return;
+  const cat = classifyPage();                                          // clicked before the dwell time: count the view and the tap now
+  if (!cat) return;
+  if (pageTimer !== undefined) { clearTimeout(pageTimer); pageTimer = undefined; }
+  pageEv = record(cat, performance.now() - pageStart, true);
+}
+document.addEventListener("click", onClick, true);
+document.addEventListener("auxclick", onClick, true);                  // middle click opens the link in a new tab
+
 setInterval(() => { if (location.pathname + location.search !== pageKey) startPage(); }, 1000);
 startPage();
-
-const scan = (root: ParentNode) => root.querySelectorAll<HTMLElement>("[data-fedad-cat]").forEach(attach);
-scan(document);
-new MutationObserver((muts) => {
-  for (const m of muts) m.addedNodes.forEach((n) => { if (n instanceof HTMLElement) { if (n.dataset.fedadCat) attach(n); scan(n); } });
-}).observe(document.documentElement, { childList: true, subtree: true });

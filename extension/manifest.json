@@ -1,10 +1,18 @@
 {
   "manifest_version": 3,
   "name": "FedAd Contributor",
-  "version": "0.2.0",
-  "description": "Learns from the campaign shop and from sites you allow one by one, on this device only, and contributes just a clipped, noised model update. No browsing history is read.",
-  "permissions": ["storage", "scripting", "activeTab"],
-  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "version": "0.3.0",
+  "description": "Learns which topics you click on, on this device only, and contributes just a clipped, noised model update. No page, address or site name leaves your computer.",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": ["https://fed-ad.vercel.app/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "FedAd Contributor" },
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" },

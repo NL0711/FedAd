@@ -12,9 +12,10 @@ await build({
   bundle: true, format: "esm", target: "chrome110", outdir: "dist", minify: false, logLevel: "info",
   define: { FEDAD_BASE: JSON.stringify(BASE) },
 });
-// The server address is fixed at build time, so its access is granted at install (no prompt, nothing for a closing popup to lose).
+// The extension runs on every page (host permission <all_urls>, granted at install) except the demo's own server, whose pages are not
+// browsing worth learning from.
 const base = JSON.parse(readFileSync("manifest.json", "utf8"));
-base.host_permissions = [new URL(BASE).origin + "/*"];
+base.content_scripts[0].exclude_matches = [...new Set([...base.content_scripts[0].exclude_matches, new URL(BASE).origin + "/*"])];
 writeFileSync("dist/manifest.json", JSON.stringify(base, null, 2));
 cpSync("src/popup.html", "dist/popup.html");
 cpSync("src/popup.css", "dist/popup.css");
