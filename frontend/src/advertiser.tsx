@@ -1,24 +1,21 @@
-// Party B (advertiser) console. Talks only to /api/b/*, which returns aggregates: no identifiers, no per-person scores.
+// Advertiser console: predicted click rate from the shared, privacy-protected model. Talks only to /api/b/model, which returns
+// aggregates read from the global model: no identifiers, no per-person or per-device data.
 import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Metric, Notice } from "./components";
 import { accessToken, signOutAndGo } from "./supabase";
 import "./styles.css";
 import "./admin.css";
 
-interface Segment { segment: string; people: number | null; predicted_conversion: number | null }
-interface Last {
-  status: "waiting" | "too_small" | "one_class" | "ok"; note?: string; overlap?: number | null; platform_users: number; advertiser_customers: number;
-  min_cohort: number; test_auc?: number | null; history?: { epoch: number; test_auc: number | null }[];
-  privacy?: { eps_embedding: number | null; eps_gradient: number | null; eps_total: number | null; delta: number };
-  segments?: Segment[]; base_rate?: number; released?: string; leakage_note?: string;
+interface Rate { name: string; ctr: number }
+interface Model {
+  contributors: number; min_contributors: number; early: boolean; version: number; dp: boolean; waiting: boolean; note?: string;
+  updates?: number; baseline_ctr?: number; by_category?: Rate[]; by_hour?: Rate[]; noise_sigma_per_upload?: number; eps_per_device?: number | null;
 }
-interface Vertical { platform_profiles: number; advertiser_customers: number; min_cohort: number; last: Last | null }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+async function api<T>(path: string): Promise<T> {
   const token = await accessToken();
-  const r = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+  const r = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (r.status === 403) {
     location.replace("/login.html");
     throw new Error("Sign in required");
@@ -26,84 +23,66 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
-const pct = (x: number | null | undefined) => (x == null ? "hidden" : `${(x * 100).toFixed(1)}%`);
+const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+
+function Bars({ rows, top }: { rows: Rate[]; top: number }) {
+  return (
+    <table>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.name}>
+            <td style={{ width: "8rem" }}>{r.name}</td>
+            <td><div style={{ background: "#2563eb", height: 14, borderRadius: 3, width: `${Math.max(2, (100 * r.ctr) / top)}%` }} /></td>
+            <td style={{ width: "4.5rem", textAlign: "right" }}>{pct(r.ctr)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 function Console() {
-  const [v, setV] = useState<Vertical | null>(null);
+  const [m, setM] = useState<Model | null>(null);
   const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [sig, setSig] = useState(3);
-  const refresh = useCallback(() => api<Vertical>("/api/b/vertical").then(setV).catch((e) => setErr(String(e.message))), []);
+  const refresh = useCallback(() => api<Model>("/api/b/model").then(setM).catch((e) => setErr(String(e.message))), []);
   useEffect(() => { void refresh(); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, [refresh]);
-
-  const run = async () => {
-    setBusy(true); setErr("");
-    try { await api("/api/b/vertical/run", { method: "POST", body: JSON.stringify({ sigma_e: sig, sigma_g: sig, epochs: 20 }) }); await refresh(); }
-    catch (e) { setErr(String((e as Error).message)); }
-    setBusy(false);
-  };
-  const last = v?.last;
+  const top = Math.max(0.01, ...(m?.by_category ?? []).map((r) => r.ctr), ...(m?.by_hour ?? []).map((r) => r.ctr));
 
   return (
     <>
-      <header className="app-header"><div className="app-title"><h1>FedAd · Advertiser (Party B)</h1><span className="badge">Prototype</span>
+      <header className="app-header"><div className="app-title"><h1>FedAd · Advertiser</h1>
         <button className="notes-btn" onClick={() => void signOutAndGo()}>Sign out</button></div></header>
       <main>
         {err && <Notice kind="error">{err}</Notice>}
-        <Notice title="What you can and cannot see">
-          You hold the purchase outcome. The ad platform holds browsing interest. We match the two groups by private set intersection and
-          train one model between you. You see group results only: sizes, accuracy, and conversion rate per interest segment (groups
-          under {v?.min_cohort ?? 10} people are hidden, rates carry noise, counts are rounded). You never see who is in the platform's
-          data, any email outside your own customers, any profile, or any individual prediction.
+        <Notice title="What this shows">
+          Predicted click rate from a shared model that many people's devices trained together. Each device clipped and noised its own
+          update before sending it, so the server never received anyone's browsing. These are predictions from the model, not measured
+          results and not individual people.
         </Notice>
 
-        <Card title="Your side and the platform's, by count">
+        <Card title="The model">
           <div className="metrics">
-            <Metric label="Your customers" value={String(v?.advertiser_customers ?? "-")} />
-            <Metric label="Platform profiles received" value={String(v?.platform_profiles ?? "-")} sub="count only" />
-            <Metric label="Matched (overlap)" value={last?.overlap == null ? "hidden" : String(last.overlap)} sub={last?.overlap == null ? `needs ${v?.min_cohort ?? 10}+` : "people in both"} />
+            <Metric label="Devices that contributed" value={String(m?.contributors ?? "-")} />
+            <Metric label="Model version" value={String(m?.version ?? "-")} />
+            <Metric label="Average predicted click rate" value={m?.baseline_ctr == null ? "-" : pct(m.baseline_ctr)} />
+            <Metric label="Privacy (per device)" value={m?.eps_per_device == null ? (m?.dp === false ? "none" : "-") : `ε ${m.eps_per_device.toFixed(0)}`} sub={m?.noise_sigma_per_upload == null ? undefined : `noise σ ${m.noise_sigma_per_upload.toFixed(2)} per update`} />
           </div>
         </Card>
 
-        <Card title="Train across both parties" note="Higher noise protects people more and costs accuracy. The epsilon below is per person (row-level) for the messages exchanged.">
-          <label>Noise on messages (sigma): {sig.toFixed(1)}
-            <input type="range" min={0} max={10} step={0.5} value={sig} onChange={(e) => setSig(Number(e.target.value))} />
-          </label>
-          <button onClick={run} disabled={busy}>{busy ? "Matching and training..." : "Run matching and training"}</button>
-        </Card>
-
-        {last && last.status !== "ok" && <Notice kind="warn">{last.note}</Notice>}
-
-        {last?.status === "ok" && (
-          <>
-            <Card title="Result">
-              <div className="metrics">
-                <Metric label="Test AUC" value={last.test_auc == null ? "n/a" : last.test_auc.toFixed(3)} sub="0.5 = no better than chance" />
-                <Metric label="Overall conversion" value={pct(last.base_rate)} sub="noised" />
-                <Metric label="Privacy (per person)" value={last.privacy?.eps_total == null ? "none" : `ε ${last.privacy.eps_total.toFixed(0)}`} sub={`δ ${last.privacy?.delta}`} />
-              </div>
-              <div style={{ height: 200 }}>
-                <ResponsiveContainer>
-                  <LineChart data={last.history}>
-                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="epoch" /><YAxis domain={[0, 1]} /><Tooltip />
-                    <Line type="monotone" dataKey="test_auc" dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </Card>
-            <Card title="Predicted conversion by platform interest segment">
-              <table>
-                <thead><tr><th>Segment (strongest interest)</th><th>People (rounded)</th><th>Predicted conversion</th></tr></thead>
-                <tbody>
-                  {last.segments?.map((s) => (
-                    <tr key={s.segment}><td>{s.segment}</td><td>{s.people ?? "hidden: group too small"}</td><td>{pct(s.predicted_conversion)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
-            <Card title="What was released to you"><p>{last.released}</p><p className="note">{last.leakage_note}</p></Card>
-          </>
+        {m?.waiting && <Notice kind="warn">{m.note}</Notice>}
+        {m && !m.waiting && m.early && (
+          <Notice kind="warn">Early estimate: only {m.contributors} device{m.contributors === 1 ? "" : "s"} so far (fewer than {m.min_contributors}). With so few, the model is mostly noise and the numbers will move a lot.</Notice>
         )}
+
+        {m?.by_category && (
+          <Card title="Predicted click rate by ad category"><Bars rows={m.by_category} top={top} /></Card>
+        )}
+        {m?.by_hour && (
+          <Card title="Predicted click rate by time of day" note="Four-hour blocks.">
+            <Bars rows={m.by_hour} top={top} />
+          </Card>
+        )}
+        {m && !m.waiting && m.note && <p className="note">{m.note}</p>}
       </main>
     </>
   );

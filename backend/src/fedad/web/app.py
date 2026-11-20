@@ -43,7 +43,7 @@ from ..federation.pipeline import Config, run
 from ..ml import criteo
 from ..ml.criteo import N_FEATURES
 from ..privacy import rdp
-from . import auth, live, shop, vertical_api
+from . import advertiser_api, auth, live, shop
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")   # Render shows stdout
 
@@ -187,7 +187,7 @@ def healthz() -> dict:
 
 app.include_router(live.router)
 app.include_router(shop.router)
-app.include_router(vertical_api.router)
+app.include_router(advertiser_api.router)
 
 
 @app.get("/api/health")

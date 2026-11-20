@@ -1,7 +1,8 @@
 # Demo checklist for reviewers
 
 What this shows: a browser extension learns what a person is interested in, on their own device, and sends only a clipped, noised
-model update to a server. The admin sees the shared (global) model change. The advertiser sees only group results.
+model update to a server. The admin sees the shared (global) model change. The advertiser sees only predicted click rate from that
+privacy-protected model (not people, not measured results).
 
 Addresses
 - Server (backend): https://fedad.onrender.com
@@ -39,6 +40,9 @@ Addresses
 6. **Show the same update arriving at the server.** Admin console, Model tab: the update appears, the global model version went up and the
    before/after bars show how far the shared weights moved.
 7. **Private by design.** Show that the admin never receives events or sites, only: device number, size, checksum, model version.
+   **Advertiser page.** Sign in as the advertiser account and open `/advertiser.html`. It shows only predicted click rate by ad category and
+   by time of day, read from the shared model, with the number of contributing devices and the privacy setting. It says "early estimate"
+   below 10 devices. It never shows a person, a device, a page or a site.
 8. **Survives a restart (optional).** Render, Manual Deploy. After it is back, the Model tab still shows the update and the same version.
 9. **Delete.** Popup, "Delete my data": the local events and the local model are gone from Extension storage and every site is dropped.
 
@@ -81,6 +85,7 @@ link on at least two of them.
 - The topic guess is a simple keyword match and skips pages it cannot place.
 - Registration is open and rate-limited per address (30 per hour). There is no stronger protection against a flood of junk updates.
 - The server accepts at most 60 devices in total.
-- The advertiser-matching profiles and shop accounts are not saved to the database yet and reset when the server restarts.
+- The advertiser page shows predicted click rate from the model only. There is no identity join, so no conversion or lift is measured.
+  Below 10 contributing devices it is labelled an early estimate.
 - The phone path (Firefox for Android) has not been tested on a device.
 - Privacy numbers (epsilon, noise) are for a demonstration and are not a formal guarantee for production use.
