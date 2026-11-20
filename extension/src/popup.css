@@ -1,0 +1,15 @@
+body { width: 340px; margin: 0; padding: 14px; font: 13px/1.45 system-ui, sans-serif; color: #1a1a1a; }
+h1 { font-size: 16px; margin: 0 0 8px; }
+h2 { font-size: 13px; margin: 14px 0 4px; }
+section { display: block; }
+section[hidden] { display: none; }
+p { margin: 6px 0; }
+label { display: block; margin: 8px 0; }
+input[type=text], input:not([type]), input[type=number] { display: block; width: 100%; box-sizing: border-box; padding: 6px; margin-top: 3px; }
+.row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+button { padding: 7px 12px; border: 1px solid #1a1a1a; background: #1a1a1a; color: #fff; border-radius: 6px; cursor: pointer; }
+button.ghost { background: #fff; color: #1a1a1a; }
+button.danger { background: #fff; color: #b00020; border-color: #b00020; margin-top: 10px; }
+button:disabled { opacity: .5; cursor: default; }
+ul { padding-left: 16px; margin: 4px 0; max-height: 140px; overflow: auto; }
+#msg { min-height: 1.4em; }

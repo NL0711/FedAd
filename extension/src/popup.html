@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>FedAd Contributor</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <h1>FedAd Contributor</h1>
+
+  <p id="nohistory" hidden><b>This browser does not give extensions access to browsing history.</b> The extension cannot read any
+  history here, so it cannot contribute. Use desktop Chrome, Edge or Firefox.</p>
+
+  <section id="consent">
+    <p><b>What this reads:</b> your browser history for the last 7 days, on this computer only. Each site is matched to one of eight
+    coarse categories (Travel, Food, Tech...). Unknown sites are ignored.</p>
+    <p><b>What leaves:</b> one model update, clipped and with random noise added here, plus the number of visits. No URLs, no
+    history, no categories list. The server cannot tell which update is yours from its contents.</p>
+    <p><b>Your controls:</b> pause, delete everything this extension stores, and a log of every send below. Contributing is always a
+    button you press.</p>
+    <label class="row"><input type="checkbox" id="agree"> I understand and agree</label>
+  </section>
+
+  <section id="join" hidden>
+    <label>Server address <input id="base" placeholder="https://your-app.onrender.com"></label>
+    <label>Join code <input id="code" maxlength="8" placeholder="ABC123"></label>
+    <button id="joinBtn">Join campaign</button>
+  </section>
+
+  <section id="main" hidden>
+    <div class="row"><span id="status"></span></div>
+    <label>Privacy ceiling per upload (epsilon) <input id="ceiling" type="number" min="1"></label>
+    <div class="row">
+      <button id="go">Contribute now</button>
+      <button id="pause" class="ghost">Pause</button>
+    </div>
+    <h2>Advertiser matching (optional)</h2>
+    <p>Lets an advertiser learn which kinds of people buy, without seeing you. This sends <b>your shop email</b> and a 14-number
+    interest profile with noise added here. The advertiser only sees group-level results.</p>
+    <label>Email you use at the shop <input id="email" type="email" placeholder="you@example.com"></label>
+    <label class="row"><input type="checkbox" id="agree2"> I agree to send my email and noised profile</label>
+    <button id="share" class="ghost" disabled>Send profile</button>
+    <p id="msg" role="status"></p>
+    <h2>What was sent</h2>
+    <ul id="log"></ul>
+    <button id="wipe" class="danger">Delete my data and leave</button>
+  </section>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

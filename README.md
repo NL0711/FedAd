@@ -35,8 +35,8 @@ python -m fedad.demo --deep             # older single-seed table -> results/dem
 
 1. Commit and push this repo to GitHub (the Criteo data stays out; `deploy/results/` ships the aggregate results the console shows).
 2. Render: New, Blueprint, pick the repo. `render.yaml` and the `Dockerfile` do the rest (builds the React pages, runs FastAPI).
-3. No admin login: `render.yaml` sets `FEDAD_OPEN_ADMIN=1`, so anyone with the URL can open the console and reset the campaign. Demo only; remove that variable to make the admin endpoints localhost-only again.
-4. Admin console: `https://<service>.onrender.com/`. Phone shop: `https://<service>.onrender.com/phone.html`. Logs tab: the proof lines (`docs/phone_demo.md`).
+3. Sign-in: `render.yaml` sets two accounts (`platform`, `advertiser`) and makes Render generate their passwords (`FEDAD_ADMIN_PASSWORD`, `FEDAD_B_PASSWORD`; read them in the service's Environment tab, give the advertiser only theirs). `/login.html` signs in and sends each account to its console; the advertiser account can only reach the aggregate-only endpoints. Localhost needs no sign-in. (`FEDAD_OPEN_ADMIN=1` opens just the advertiser endpoints, for a login-free demo.)
+4. Platform console: `https://<service>.onrender.com/`. Advertiser (Party B) console: `/advertiser.html`. Phone shop: `/phone.html`. Browser extension: `extension/` (`npm run build`, load `dist` unpacked in Chrome or Edge). Vertical FL (PSI plus split model): `backend/src/fedad/vertical/`, service in `web/vertical_api.py`.
 
 Free instances sleep after idle time and lose all state on restart (campaign, accounts, model): wake it before the demo. The shop keeps
 emails and passwords in memory: use throwaway ones. Benchmark runs (Criteo) are not available on the deployed service, only the saved results.

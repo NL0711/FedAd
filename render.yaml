@@ -1,5 +1,7 @@
-# Render Blueprint: one web service runs the backend and serves both web pages.
-# DEMO: the admin endpoints have no login (FEDAD_OPEN_ADMIN=1); anyone with the URL can use the console and reset the campaign.
+# Render Blueprint: one web service runs the backend and serves the web pages.
+# Sign-in (/login.html): the platform account opens the console at /, the advertiser account opens /advertiser.html and only ever
+# receives aggregates. Render generates both passwords: read them under the service's Environment tab and hand out only the
+# advertiser's. FEDAD_SECRET signs the session cookie; without it a restart signs everyone out.
 services:
   - type: web
     name: fedad
@@ -7,5 +9,15 @@ services:
     plan: free
     healthCheckPath: /healthz
     envVars:
-      - key: FEDAD_OPEN_ADMIN
-        value: "1"
+      - key: FEDAD_ADMIN_USER
+        value: platform
+      - key: FEDAD_ADMIN_PASSWORD
+        generateValue: true
+      - key: FEDAD_B_USER
+        value: advertiser
+      - key: FEDAD_B_PASSWORD
+        generateValue: true
+      - key: FEDAD_SECRET
+        generateValue: true
+      - key: FEDAD_MIN_COHORT
+        value: "10"

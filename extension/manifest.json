@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "FedAd Contributor",
+  "version": "0.1.0",
+  "description": "Contributes to a federated ad model. Your browsing history is read and turned into coarse categories on this computer; only a clipped, noised model update is sent.",
+  "permissions": ["history", "storage"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "FedAd Contributor" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" },
+  "icons": { "128": "icon.png" }
+}
