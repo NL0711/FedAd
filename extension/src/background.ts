@@ -1,12 +1,15 @@
 // Background worker: stores the events the content script observed on the campaign's site and on sites the user allowed one by one,
 // trains on them, and talks to the server. No browsing history is read; only the sites on the allow-list are ever observed, and
 // only a clipped, noised model update (never the events, pages or host names) leaves this computer.
-import { contribute, getSchema, register, Refused, type Schema } from "../../frontend/src/phone/client.ts";
+import { categoryRates, contribute, getModel, getSchema, register, Refused, type Schema } from "../../frontend/src/phone/client.ts";
 import { buildProfile, buildRows, summarize, type Ev } from "./features.ts";
 
 export interface LogEntry {
   t: number; n: number; categories: Record<string, number>; bytes: number; checksum: number; eps: number; version: number; stepped: boolean;
   kind?: "profile"; email?: string;
+  /** Predicted click rate per category: this device's own model, the server model it started from, and the server model afterwards.
+   *  Computed here from weights; the local column never leaves this computer. */
+  models?: { name: string; local: number; before: number; after: number }[];
 }
 export interface State {
   consent: boolean; paused: boolean; base: string; joined: boolean; deviceId: number | null; uploads: number;
@@ -14,7 +17,7 @@ export interface State {
   /** Sites the user allowed one by one (origins), and this computer's own per-host counts. Nothing here is ever sent. */
   sites: string[]; siteStats: Record<string, { views: number; taps: number }>;
 }
-const DEFAULTS = { consent: false, paused: false, base: "", joined: false, deviceId: null, uploads: 0, ceiling: 150, log: [] as LogEntry[], events: [] as Ev[], sites: [] as string[] };
+const DEFAULTS = { consent: false, paused: false, base: "", joined: false, deviceId: null, uploads: 0, ceiling: 150, log: [] as LogEntry[], events: [] as Ev[], sites: [] as string[], localModel: null as unknown };
 const MAX_EVENTS = 2000;
 const MIN_VIEWS = 20, MIN_TAPS = 2;
 const SCRIPT_ID = "fedad-content";
@@ -90,9 +93,19 @@ async function doContribute(): Promise<{ ok: boolean; message: string; entry?: L
       base: s.base, token: s.token, schema: S, X, y, ceilingPerUpload: s.ceiling, allowNonPrivate: false,
       uploadsSoFar: s.uploads, onStep: (i, st, d) => { if (st !== "run") steps.push(`${i}:${st}:${d}`); },
     });
+    let models: LogEntry["models"];
+    try {
+      const fresh = await getModel(s.base);                      // the server model as it is now
+      const local = categoryRates(S, res.proof.wLocal), before = categoryRates(S, res.proof.wGlobal), after = categoryRates(S, fresh.weights);
+      models = local.map((x, i) => ({ name: x.name, local: x.ctr, before: before[i].ctr, after: after[i].ctr }));
+    } catch { /* the comparison is optional */ }
     const entry: LogEntry = { t: Date.now(), n: s.events.length, categories: summarize(s.events), bytes: res.proof.bytes, checksum: res.proof.checksum,
-                              eps: res.epsCharged, version: res.reply.version, stepped: res.reply.model_stepped };
-    await save({ uploads: s.uploads + 1, log: [entry, ...s.log].slice(0, 50) });
+                              eps: res.epsCharged, version: res.reply.version, stepped: res.reply.model_stepped, models };
+    // The local model lives in this browser's extension storage (DevTools > Application > Extension storage > Local > localModel).
+    // It is the server model this device started from plus what it learned here; only the clipped, noised update was sent.
+    const labels = [...S.feature_names, "bias"];
+    const localModel = { t: Date.now(), basedOnServerVersion: res.model.version, labels, local: res.proof.wLocal, serverBefore: res.proof.wGlobal };
+    await save({ uploads: s.uploads + 1, log: [entry, ...s.log].slice(0, 50), localModel });
     return { ok: true, message: "Sent one noised update.", entry, steps };
   } catch (e) {
     return { ok: false, message: e instanceof Refused ? e.message : `Failed: ${String(e)}`, steps };

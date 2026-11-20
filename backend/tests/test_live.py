@@ -1,6 +1,7 @@
 """Live campaign: device registration, upload contract, privacy ledger, insights, admin-only endpoints."""
 
 import base64
+import json
 
 import numpy as np
 import pytest
@@ -77,6 +78,35 @@ def test_join_code_token_and_contribution_flow(api):
     up = snap["model"]["uploads"][0]
     assert up["checksum"] == zlib.adler32(blob) and up["bytes"] == len(blob) and len(up["vec"]) == schema.N_FEATURES + 1
     assert up["after"] != up["before"] and snap["model"]["weights"] == up["after"] and up["step_norm"] > 0
+
+
+class _MemStore:
+    """Stands in for Postgres: keeps what was written, as JSON text, the way the database would."""
+    def __init__(self):
+        self.text = None
+
+    def read(self):
+        return json.loads(self.text) if self.text else None
+
+    def write(self, state):
+        self.text = json.dumps(state)
+
+
+def test_campaign_survives_a_restart(api, monkeypatch):
+    c, _ = api
+    store = _MemStore()
+    monkeypatch.setattr(live, "STORE", store)
+    reg = c.post("/v1/register", json={"label": "my phone"}).json()
+    hdr = {"Authorization": f"Bearer {reg['token']}"}
+    assert c.post("/v1/updates", json=_upload_body(c.get("/v1/model").json(), _device_data()), headers=hdr).status_code == 200
+    before = live.CAMPAIGN
+    assert store.text and reg["token"] not in store.text                              # saved, and only the token's hash
+    live.CAMPAIGN = live._initial()                                                    # what a server restart does
+    after = live.CAMPAIGN
+    assert after is not before and after.coord.version == before.coord.version == 1
+    assert np.array_equal(after.coord.w, before.coord.w) and len(after.uploads) == 1 and len(after.devices) == 1
+    assert c.post("/v1/updates", json=_upload_body(c.get("/v1/model").json(), _device_data(seed=1)), headers=hdr).status_code == 200   # same token still works
+    assert c.get("/api/live").json()["status"]["version"] == 2
 
 
 def test_upload_budget_and_malformed(api):

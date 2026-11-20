@@ -22,6 +22,14 @@ function render(s: State) {
     return li;
   }));
   if (!s.log.length) ul.textContent = "Nothing sent yet.";
+  const tbl = $("models");
+  const latest = s.log.find((e) => e.models);
+  if (latest?.models) {
+    const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
+    const row = (cells: string[], tag = "td") => { const tr = document.createElement("tr"); for (const c of cells) { const td = document.createElement(tag); td.textContent = c; tr.append(td); } return tr; };
+    tbl.replaceChildren(row(["Category", "Local", "Server before", "Server now"], "th"),
+      ...latest.models.map((m) => row([m.name, pct(m.local), pct(m.before), pct(m.after)])));
+  } else tbl.textContent = "Press Contribute now to compare.";
   const sl = $("sites");
   sl.replaceChildren(...s.sites.map((o) => {
     const li = document.createElement("li");

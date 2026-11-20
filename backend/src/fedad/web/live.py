@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import hmac
 import logging
 import secrets
@@ -40,6 +41,7 @@ from ..federation.pipeline import Config, Upload
 from ..ml import schema
 from ..ml.model import Model, sigmoid
 from ..privacy import rdp
+from . import persist
 
 MAX_BODY = 256 * 1024
 MAX_DEVICES = 60
@@ -61,10 +63,15 @@ class CampaignPolicy(BaseModel):
     prior_ctr: float = Field(0.05, gt=0.001, lt=0.5)
 
 
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 class Device:
     def __init__(self, device_id: int, label: str):
         self.id, self.label = device_id, label
-        self.token = secrets.token_urlsafe(32)
+        self.token = secrets.token_urlsafe(32)               # only ever held in memory, handed to the device once
+        self.token_hash = _hash_token(self.token)            # what is stored and compared
         self.joined = time.time()
         self.last_seen = self.joined
         self.uploads = 0
@@ -95,15 +102,49 @@ class Campaign:
                 raise HTTPException(429, "device limit reached")
             d = Device(len(self.devices) + 1, label[:24] or f"device-{len(self.devices) + 1}")
             self.devices[d.id] = d
-            self.by_token[d.token] = d.id
-            return d
+            self.by_token[d.token_hash] = d.id
+        self.save()
+        return d
 
     def device_for(self, token: str) -> Optional[Device]:
-        found = None
-        for tok, did in list(self.by_token.items()):       # compare against all, constant-time each
-            if hmac.compare_digest(tok, token):
-                found = did
-        return self.devices.get(found) if found is not None else None
+        did = self.by_token.get(_hash_token(token))         # lookup by hash of a 256-bit random token
+        return self.devices.get(did) if did is not None else None
+
+    # ---- persistence (see persist.py) -----------------------------------------------------------------------------
+
+    def to_state(self) -> dict:
+        with self.lock:
+            return {
+                "policy": self.policy.model_dump(), "created": self.created, "version": self.coord.version,
+                "w": [float(x) for x in self.coord.w], "history": self.coord.history, "uploads_done": {str(k): v for k, v in self.coord.uploads_done.items()},
+                "devices": [{"id": d.id, "label": d.label, "token_hash": d.token_hash, "joined": d.joined, "last_seen": d.last_seen,
+                             "uploads": d.uploads, "bytes": d.bytes, "examples": d.examples} for d in self.devices.values()],
+                "uploads": self.uploads, "events": self.events,
+            }
+
+    @classmethod
+    def from_state(cls, st: dict) -> "Campaign":
+        c = cls(CampaignPolicy(**st["policy"]))
+        w = np.asarray(st["w"], dtype=np.float64)
+        if w.shape != c.coord.w.shape:
+            raise ValueError("saved model does not match the current schema")
+        c.coord.w, c.coord.version, c.coord.history = w, int(st["version"]), list(st["history"])
+        c.coord.uploads_done = {int(k): int(v) for k, v in st["uploads_done"].items()}
+        c.created, c.uploads, c.events = st["created"], list(st["uploads"]), list(st["events"])
+        for dd in st["devices"]:
+            d = Device(dd["id"], dd["label"])
+            d.token, d.token_hash = "", dd["token_hash"]
+            d.joined, d.last_seen, d.uploads, d.bytes, d.examples = dd["joined"], dd["last_seen"], dd["uploads"], dd["bytes"], dd["examples"]
+            c.devices[d.id], c.by_token[d.token_hash] = d, d.id
+        return c
+
+    def save(self) -> None:
+        if STORE is None:
+            return
+        try:
+            STORE.write(self.to_state())
+        except Exception as e:                              # losing a save must never break a request
+            log.error("PERSIST save failed (%s)", type(e).__name__)
 
     def submit(self, dev: Device, up: Upload) -> dict:
         before = self.coord.w.copy()
@@ -133,6 +174,7 @@ class Campaign:
             self.events.append({"t": time.time(), "device": dev.id, "bytes": len(up.blob), "version": reply["version"],
                                 "stepped": reply["model_stepped"]})
             self.events = self.events[-200:]
+        self.save()
         return reply
 
     # ---- admin view -----------------------------------------------------------------------------------------------
@@ -185,7 +227,24 @@ class Campaign:
                 "history": self.coord.history[-50:], "prototype": True}
 
 
-CAMPAIGN = Campaign(CampaignPolicy())
+STORE = persist.open_store()
+
+
+def _initial() -> Campaign:
+    """The saved campaign if there is one (a restart resumes where it stopped), otherwise a fresh one."""
+    if STORE is not None:
+        try:
+            st = STORE.read()
+            if st:
+                c = Campaign.from_state(st)
+                log.info("PERSIST restored: model v%d, %d devices, %d updates", c.coord.version, len(c.devices), len(c.uploads))
+                return c
+        except Exception as e:
+            log.error("PERSIST restore failed, starting fresh (%s)", type(e).__name__)
+    return Campaign(CampaignPolicy())
+
+
+CAMPAIGN = _initial()
 
 
 def lan_ips() -> List[str]:
@@ -309,6 +368,7 @@ def live_reset(policy: CampaignPolicy) -> dict:
     global CAMPAIGN
     _REGISTERED.clear()
     CAMPAIGN = Campaign(policy)
+    CAMPAIGN.save()
     log.info("CAMPAIGN new code=%s eps_total=%.0f uploads/device=%d buffer_k=%d dp=%s prior_ctr=%.2f", CAMPAIGN.join_code, policy.eps_total,
              policy.max_uploads, policy.buffer_k, policy.dp, policy.prior_ctr)
     return {"ok": True, "join_code": CAMPAIGN.join_code}

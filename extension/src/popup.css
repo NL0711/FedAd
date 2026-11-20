@@ -13,3 +13,7 @@ button.danger { background: #fff; color: #b00020; border-color: #b00020; margin-
 button:disabled { opacity: .5; cursor: default; }
 ul { padding-left: 16px; margin: 4px 0; max-height: 140px; overflow: auto; }
 #msg { min-height: 1.4em; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { text-align: right; padding: 2px 4px; border-bottom: 1px solid #ddd; }
+th:first-child, td:first-child { text-align: left; }
