@@ -5,6 +5,12 @@ not) - that's not how actual data works, right?" Written 2026-11-20. External cl
 primary source is marked "unconfirmed". Repo facts were read from the code on branch `admin-ui`. Papers were read as PDFs
 (arXiv or the authors' host), not from memory; the Criteo pages were fetched live on 2026-11-20.
 
+**Update after this note was written.** The extension no longer uses one row per page. A row is now one link the person saw (like an
+impression), clicked or not, with a topic from the link's own words and a placement from where it sits on the page; a clicked row is weighted
+by how long the person stayed on the page it led to (1 to 4, `DWELL_WEIGHT` in `extension/src/background.ts`, off with `false`). The
+session numbers (`position`, `session_min`, `recency_min`, `taps_24h`, `prev_dwell_s`) are computed in the background worker across pages,
+and `visible_ms` is a constant. The sections below describe the earlier per-page version.
+
 ## Short answer
 
 - **The format is real; the meaning is not.** Real CTR systems do use "one impression = one row, label = clicked yes/no, logistic

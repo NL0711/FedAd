@@ -1,8 +1,10 @@
 // Observed page events -> training rows in the phone schema (phone-ctr-v1). Runs on this computer only.
 import type { Schema } from "../../frontend/src/phone/client.ts";
 
-/** One page view with its topic. y = 1 if the person clicked something on it. Same shape the phone page records. No address or site name. */
-export interface Ev { id: number; t: number; cat: string; placement: string; hour: number; dev: number; raw: Record<string, number>; y: number }
+/** One link the person saw (an impression) with its topic and where it sat on the page. y = 1 if they clicked it. Same shape the phone page
+ *  records. `w` is the training weight: 1, or for a click 1 + how long they stayed on the page it led to (see background.ts). No address or
+ *  site name is kept. */
+export interface Ev { id: number; t: number; cat: string; placement: string; hour: number; dev: number; raw: Record<string, number>; y: number; w?: number }
 
 export function encodeRow(S: Schema, e: Ev): number[] {
   const row = new Array<number>(S.n_features).fill(0);
@@ -18,15 +20,9 @@ export function encodeRow(S: Schema, e: Ev): number[] {
   return row;
 }
 
-export function buildRows(S: Schema, events: Ev[]): { X: Float64Array; y: Float64Array } {
+export function buildRows(S: Schema, events: Ev[]): { X: Float64Array; y: Float64Array; w: Float64Array } {
   const X = new Float64Array(events.length * S.n_features);
   events.forEach((e, i) => X.set(encodeRow(S, e), i * S.n_features));
-  return { X, y: Float64Array.from(events.map((e) => e.y)) };
-}
-
-export function summarize(events: Ev[]): Record<string, number> {
-  const c: Record<string, number> = {};
-  for (const e of events) c[e.cat] = (c[e.cat] ?? 0) + 1;
-  return c;
+  return { X, y: Float64Array.from(events.map((e) => e.y)), w: Float64Array.from(events.map((e) => e.w ?? 1)) };
 }
 

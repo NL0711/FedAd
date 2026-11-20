@@ -10,7 +10,7 @@ function render(s: State) {
   ($("agree") as HTMLInputElement).checked = s.consent;
   if (!s.consent) return;
   $("status").textContent = s.joined
-    ? `Connected. ${s.views} pages, ${s.taps} clicks. ${s.uploads} update${s.uploads === 1 ? "" : "s"} sent.`
+    ? `Connected. ${s.views} links seen, ${s.taps} clicked. ${s.uploads} update${s.uploads === 1 ? "" : "s"} sent.`
     : "Connecting...";
   $("retry").hidden = s.joined;
   say(s.message);

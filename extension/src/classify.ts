@@ -71,3 +71,11 @@ export function pageSignals(): Signals {
 }
 
 export const classifyPage = (): string | null => decide(scoreSignals(pageSignals()));
+
+/** Topic of one link, from its own words (text, label, title, address words). Short text carries less, so the bar is lower than for a page. */
+export function classifyLink(text: string, href: string): string | null {
+  let path = "";
+  try { const u = new URL(href, location.href); path = decodeURIComponent(u.pathname).replace(/[\/_\-+.]/g, " "); } catch { /* not a URL */ }
+  const [best, second] = scoreSignals({ strong: `${text} ${path}`, medium: "", weak: "" });
+  return best[1] >= 3 && best[1] > second[1] ? best[0] : null;
+}

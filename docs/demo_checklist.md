@@ -26,14 +26,16 @@ Addresses
    permission it needs to read each page's title and headings on the device). Pages with a password or card field are skipped, and the
    demo's own admin and server pages are excluded. A site can be blocked in Chrome: `chrome://extensions`, Details, Site access.
 3. **Browse like a normal person.** Open pages from the list below, stay on each for 3 seconds, then click an article or link. Repeat on several pages.
-   - A page open for 2.5 seconds, whose topic is recognised, is one view. A click on a link, button or anything clickable is one tap
-     (one per page). You need **20 views and 2 taps** in total.
+   - The unit is a **link seen**, like an ad impression: a link that was at least half on screen for 0.7 seconds, with a topic from its own
+     words (or the page's topic), at most 12 per page. A click on a counted link marks it **clicked**; links not clicked are the "no" examples.
+     A click on a button or other clickable thing counts once per page. A clicked row is weighted by how long you stayed on the page it led
+     to (weight 1 to 4). You need **20 links seen and 2 clicked** in total.
    - Expect: the popup shows the page and click counts, kept on this computer.
 4. **Show the local model.** DevTools for the extension: `chrome://extensions`, click "service worker" under the extension, Application tab,
    Extension storage, Local. `events` is the local cache of what was seen. After step 5, `localModel` holds the local weights next to
    the server weights it started from.
-5. **The update is sent by itself.** There is no button. Once there are 20 views and 2 taps, the extension trains on the device and
-   sends an update, then again after every 5 new views (at most once a minute). Keep the service worker DevTools open on the Network tab
+5. **The update is sent by itself.** There is no button. Once there are 20 links seen and 2 clicked, the extension trains on the device and
+   sends an update, then again after every 5 new links (at most once a minute). Keep the service worker DevTools open on the Network tab
    (tick Preserve log) to watch it.
    - `GET /v1/model`: the global model comes down.
    - `POST /v1/updates`: the update goes up. The body has `base_version`, `n`, `loss_before`, `loss_after` and `blob`. No page, no site name, no list of what was viewed.
@@ -67,7 +69,7 @@ views go up.
 Not guessed (the page title is too generic, or the site blocked the check): gsmarena.com, theverge.com, cnet.com, xda-developers.com,
 ign.com, gamespot.com, fifa.com, espn.in, booking.com, makemytrip.com, investopedia.com, allrecipes.com, seriouseats.com.
 
-Quick route to 20 views: open 4 or 5 sites from different topics, open 4 article pages on each, hold each page 3 seconds, click one
+Quick route to 20 links seen: open 2 or 3 sites from different topics, scroll each page so several links stay on screen for a second, click one
 link on at least two of them.
 
 ## D. If something does not work
@@ -75,7 +77,7 @@ link on at least two of them.
 | Symptom | Likely cause and fix |
 |---|---|
 | Popup stays on "Connecting..." | The server is asleep or redeploying. Open `/healthz`, wait, press "Try again". |
-| No update is sent | Needs 20 views and 2 taps first, then 5 new views and a minute between updates. Keep browsing. |
+| No update is sent | Needs 20 links seen and 2 clicked first, then 5 new links and a minute between updates. Keep browsing. |
 | Views stay at 0 on a site | Reload the page once after installing. The page may not be guessable (see the "not guessed" list), or it has a password field. |
 | Model tab says "Waiting for an update" | No device has contributed since the last restart or new campaign. |
 | Admin console is empty after a restart | `DATABASE_URL` is not set on Render, so nothing was saved. |

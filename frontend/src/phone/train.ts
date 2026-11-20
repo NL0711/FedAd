@@ -47,14 +47,17 @@ function predictRow(w: Float64Array, X: Float64Array, i: number, F: number): num
   return sigmoidClipped(z);
 }
 
-export function logLoss(w: Float64Array, X: Float64Array, y: Float64Array, F: number): number {
+/** Mean log loss. ``wts`` is an optional weight per row (default 1): the loss is the weighted mean. */
+export function logLoss(w: Float64Array, X: Float64Array, y: Float64Array, F: number, wts?: Float64Array): number {
   const n = y.length;
-  let s = 0;
+  let s = 0, ws = 0;
   for (let i = 0; i < n; i++) {
     const p = Math.min(1 - 1e-7, Math.max(1e-7, predictRow(w, X, i, F)));
-    s += y[i] * Math.log(p) + (1 - y[i]) * Math.log(1 - p);
+    const wi = wts ? wts[i] : 1;
+    s += wi * (y[i] * Math.log(p) + (1 - y[i]) * Math.log(1 - p));
+    ws += wi;
   }
-  return -s / n;
+  return -s / ws;
 }
 
 export interface LocalResult {
@@ -63,11 +66,13 @@ export interface LocalResult {
   after: number;
 }
 
-/** Minibatch SGD from ``w`` (same loop as Model.local_train). ``perm`` supplies each epoch's shuffle order. */
+/** Minibatch SGD from ``w`` (same loop as Model.local_train). ``perm`` supplies each epoch's shuffle order.
+ *  ``wts`` is an optional weight per row (default 1, which is exactly Model.local_train): a batch's gradient is the weighted mean, so the
+ *  step size stays the same however large the weights are. The update is clipped afterwards, so weights never raise the privacy cost. */
 export function localTrain(w: Float64Array, X: Float64Array, y: Float64Array, F: number, epochs: number, lr: number,
-                           batch: number, perm: (n: number) => ArrayLike<number> = cryptoPermutation, l2 = 1e-4): LocalResult {
+                           batch: number, perm: (n: number) => ArrayLike<number> = cryptoPermutation, l2 = 1e-4, wts?: Float64Array): LocalResult {
   const n = y.length;
-  const before = logLoss(w, X, y, F);
+  const before = logLoss(w, X, y, F, wts);
   const cur = Float64Array.from(w);
   const g = new Float64Array(F + 1);
   for (let e = 0; e < epochs; e++) {
@@ -75,22 +80,24 @@ export function localTrain(w: Float64Array, X: Float64Array, y: Float64Array, F:
     for (let s = 0; s < n; s += batch) {
       const m = Math.min(batch, n - s);
       g.fill(0);
-      let errSum = 0;
+      let errSum = 0, wSum = 0;
       for (let k = 0; k < m; k++) {
         const i = order[s + k];
-        const err = predictRow(cur, X, i, F) - y[i];
+        const wi = wts ? wts[i] : 1;
+        const err = (predictRow(cur, X, i, F) - y[i]) * wi;
         errSum += err;
+        wSum += wi;
         const o = i * F;
         for (let j = 0; j < F; j++) g[j] += X[o + j] * err;
       }
-      for (let j = 0; j < F; j++) g[j] = g[j] / m + l2 * cur[j];
-      g[F] = errSum / m;
+      for (let j = 0; j < F; j++) g[j] = g[j] / wSum + l2 * cur[j];
+      g[F] = errSum / wSum;
       for (let j = 0; j <= F; j++) cur[j] -= lr * g[j];
     }
   }
   const delta = new Float64Array(F + 1);
   for (let j = 0; j <= F; j++) delta[j] = cur[j] - w[j];
-  return { delta, before, after: logLoss(cur, X, y, F) };
+  return { delta, before, after: logLoss(cur, X, y, F, wts) };
 }
 
 export function norm2(v: Float64Array): number {

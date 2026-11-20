@@ -43,6 +43,8 @@ export const register = (base: string, join_code: string, label: string) =>
 export type StepState = "run" | "done" | "fail";
 export interface ContributeInput {
   base: string; token: string; schema: Schema; X: Float64Array; y: Float64Array;
+  /** Optional weight per row (default 1). The extension weights a clicked row by how long the person stayed on the page it led to. */
+  weights?: Float64Array;
   ceilingPerUpload: number; allowNonPrivate: boolean; uploadsSoFar: number;
   onStep: (index: number, state: StepState, detail: string) => void;
 }
@@ -84,7 +86,7 @@ async function attempt(inp: ContributeInput, retry: boolean): Promise<Contribute
 
   step(2, "run", "");
   const n = inp.y.length;
-  const res = localTrain(Float64Array.from(m.weights), inp.X, inp.y, F, pol.local_epochs, pol.lr, pol.batch);
+  const res = localTrain(Float64Array.from(m.weights), inp.X, inp.y, F, pol.local_epochs, pol.lr, pol.batch, undefined, undefined, inp.weights);
   step(2, "done", `${n} views, loss ${res.before.toFixed(2)} → ${res.after.toFixed(2)}`);
 
   step(3, "run", "");
