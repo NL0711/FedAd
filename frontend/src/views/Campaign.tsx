@@ -1,15 +1,6 @@
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 import { Card, Metric, Notice } from "../components";
 import { ago, resetCampaign, useLive, type CampaignPolicy } from "../live";
-
-function Qr({ text }: { text: string }) {
-  const [src, setSrc] = useState("");
-  useEffect(() => {
-    QRCode.toDataURL(text, { margin: 1, width: 280, errorCorrectionLevel: "M" }).then(setSrc, () => setSrc(""));
-  }, [text]);
-  return src ? <img src={src} width={280} height={280} alt={`QR code for ${text}`} style={{ border: "2px solid #111827", display: "block" }} /> : null;
-}
 
 const fmtEps = (x: number) => (x >= 100 ? x.toFixed(0) : x.toFixed(1));
 
@@ -32,7 +23,6 @@ export default function Campaign() {
   }
   if (!snap || !draft) return <p className="loading">Loading campaign…</p>;
 
-  const url = snap.join.urls[0];
   const contributions = snap.devices.reduce((s, d) => s + d.uploads, 0);
   const set = <K extends keyof CampaignPolicy>(k: K, v: CampaignPolicy[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d));
 
@@ -53,33 +43,14 @@ export default function Campaign() {
     <>
       <h2>Campaign</h2>
       <p className="lede">
-        Phones join this campaign, learn from their owners' taps on the device, and send only noised model updates. You never receive a tap, a timestamp or an
-        identifier. Open the phone page, scroll the feed, tap a few ads, press Contribute, then watch the Insights tab.
+        Devices join this campaign through the browser extension, learn from their owners' activity on the device, and send only noised model updates. You never
+        receive a tap, a timestamp or an identifier. Watch the Insights tab as updates arrive.
       </p>
 
       <div className="grid2">
-        <Card title="1. Join: scan with the phone">
-          {url ? (
-            <div className="join">
-              <Qr text={url} />
-              <div>
-                <div className="metric-label">Or type this address in the phone's browser</div>
-                <code className="url">{url}</code>
-                <p className="note" style={{ marginTop: "0.6rem" }}>No code needed. Anyone who installs the browser extension joins automatically.</p>
-              </div>
-            </div>
-          ) : (
-            <Notice kind="warn" title="No network address to show">
-              The server found no LAN address. Connect the laptop to Wi-Fi, then restart the server with <code>python -m fedad.web --lan</code>.
-            </Notice>
-          )}
-          {!snap.join.lan_enabled && (
-            <Notice kind="warn" title="Phones cannot reach this server yet">
-              It is listening on this laptop only. Restart with <code>python -m fedad.web --lan</code>, allow Python through the Windows firewall for private
-              networks, and keep the phone on the same Wi-Fi. This admin page stays local to this laptop either way.
-            </Notice>
-          )}
-          <p className="note">Plain HTTP on your local network: fine for a demo on a Wi-Fi you trust, not for the internet. Registration is open and rate-limited per address; nothing stronger is implemented.</p>
+        <Card title="1. Join">
+          <p>Anyone who installs the browser extension and agrees joins this campaign automatically. There is no code to share.</p>
+          <p className="note">Registration is open and rate-limited per address; nothing stronger is implemented.</p>
         </Card>
 
         <Card title="2. Privacy policy for this campaign">

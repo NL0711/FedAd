@@ -66,7 +66,7 @@ async function connect() {
   const granted = await chrome.permissions.request({ origins: [new URL(base).origin + "/*"] });
   if (!granted) return say("Permission to contact the server was not granted.");
   const r = await send({ type: "join", base });
-  if (r.error) return say("Could not connect to the server.");
+  if (r.error) return say(`Could not connect to ${base}: ${r.error}`);
   render(r);
 }
 $("agree").addEventListener("change", async (ev) => {

@@ -51,8 +51,7 @@ emails and passwords in memory: use throwaway ones. Benchmark runs (Criteo) are 
 The extension (`extension/`) joins the campaign automatically when the user agrees: there is no join code. It learns on sites the
 user allows one by one (an on-device topic guess per page, plus product cards that carry `data-fedad-cat` and `data-fedad-placement`),
 trains on the device and contributes only a clipped, noised update; no browsing history is read. Registration is open and rate-limited
-per address. Build and load: `cd extension && npm install && npm run build` (set `FEDAD_BASE=https://your-server` to point it at the
-deployed backend), then load `dist` unpacked in Chrome or Edge (`dist-firefox` for Firefox, including Firefox for Android through
+per address. Build and load: `cd extension && npm install && npm run build` (it joins the deployed backend `https://fedad.onrender.com` by default; set `FEDAD_BASE=http://localhost:8000` to test against a local server), then load `dist` unpacked in Chrome or Edge (`dist-firefox` for Firefox, including Firefox for Android through
 `web-ext run -t firefox-android`).
 
 ## Federated runtime: Flower, and what this repo adds to it
