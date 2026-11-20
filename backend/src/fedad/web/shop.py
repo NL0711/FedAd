@@ -158,6 +158,11 @@ async def login(request: Request) -> dict:
         raise HTTPException(400, "enter an email and a password of 4+ characters")
     with LOCK:
         u = USERS.get(email)
+        mode = d.get("mode")
+        if mode == "signin" and u is None:
+            raise HTTPException(404, "no account with that email, create one first")
+        if mode == "signup" and u is not None:
+            raise HTTPException(409, "an account with that email already exists, sign in instead")
         if u is None:
             salt = secrets.token_bytes(16)
             USERS[email] = {"salt": salt, "hash": _hash(pw, salt), "cart": [], "orders": []}

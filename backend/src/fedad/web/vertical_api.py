@@ -105,7 +105,8 @@ def _run(req: RunBody) -> dict:
                  "request": req.model_dump()}
     if not emails_a or not emails_b:
         out["status"] = "waiting"
-        out["note"] = "Needs browser-extension users on the platform side and shop accounts on the advertiser side."
+        out["note"] = ("Needs people who turned on Private learning (on the store site, or through the browser extension) and sent their interest "
+                       "profile, and shop accounts on the advertiser side, matched by the same email.")
         return out
     ia, ib = psi.run(emails_a, emails_b)                       # PSI: only the overlap is aligned, nobody else is revealed
     out["overlap"] = len(ia)
