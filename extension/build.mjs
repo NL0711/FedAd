@@ -3,15 +3,19 @@ import { build } from "esbuild";
 import { cpSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 
+// Server the extension joins automatically: the deployed backend by default. For local testing: $env:FEDAD_BASE="http://localhost:8000"; npm run build
+const BASE = (process.env.FEDAD_BASE ?? "https://fedad.onrender.com").replace(/\/+$/, "");
 rmSync("dist", { recursive: true, force: true });
 mkdirSync("dist", { recursive: true });
 await build({
   entryPoints: { background: "src/background.ts", popup: "src/popup.ts", content: "src/content.ts" },
   bundle: true, format: "esm", target: "chrome110", outdir: "dist", minify: false, logLevel: "info",
-  // Server the extension joins automatically: the deployed backend by default. For local testing: $env:FEDAD_BASE="http://localhost:8000"; npm run build
-  define: { FEDAD_BASE: JSON.stringify(process.env.FEDAD_BASE ?? "https://fedad.onrender.com") },
+  define: { FEDAD_BASE: JSON.stringify(BASE) },
 });
-cpSync("manifest.json", "dist/manifest.json");
+// The server address is fixed at build time, so its access is granted at install (no prompt, nothing for a closing popup to lose).
+const base = JSON.parse(readFileSync("manifest.json", "utf8"));
+base.host_permissions = [new URL(BASE).origin + "/*"];
+writeFileSync("dist/manifest.json", JSON.stringify(base, null, 2));
 cpSync("src/popup.html", "dist/popup.html");
 cpSync("src/popup.css", "dist/popup.css");
 // 1x1 placeholder icon, replace with a real 128x128 PNG before publishing
@@ -21,7 +25,7 @@ else writeFileSync("dist/icon.png", Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAA
 // Firefox (desktop and Android) build: same code, manifest adapted (event-page scripts instead of a service worker, extension id).
 rmSync("dist-firefox", { recursive: true, force: true });
 cpSync("dist", "dist-firefox", { recursive: true });
-const m = JSON.parse(readFileSync("manifest.json", "utf8"));
+const m = JSON.parse(readFileSync("dist/manifest.json", "utf8"));
 m.background = { scripts: ["background.js"], type: "module" };
 m.browser_specific_settings = { gecko: { id: "fedad-contributor@example.org", data_collection_permissions: { required: ["websiteActivity"] } }, gecko_android: {} };
 writeFileSync("dist-firefox/manifest.json", JSON.stringify(m, null, 2));

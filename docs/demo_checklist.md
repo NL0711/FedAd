@@ -1,0 +1,86 @@
+# Demo checklist for reviewers
+
+What this shows: a browser extension learns what a person is interested in, on their own device, and sends only a clipped, noised
+model update to a server. The admin sees the shared (global) model change. The advertiser sees only group results.
+
+Addresses
+- Server (backend): https://fedad.onrender.com
+- Sign in: https://fed-ad.vercel.app/login.html (admin and advertiser accounts are in Supabase Auth)
+- Admin console: https://fed-ad.vercel.app/
+- Advertiser console: https://fed-ad.vercel.app/advertiser.html
+
+## A. Before the demo (presenter, 10 minutes ahead)
+
+- [ ] Open https://fedad.onrender.com/healthz. The free server sleeps, so the first load can take about a minute. Expect `{"ok":true}`.
+- [ ] Render logs show `PERSIST on` (the model is saved to Supabase and survives restarts).
+- [ ] Admin console, Campaign page, start a new campaign (clears old test devices). Model version reads 0.
+- [ ] Build and load the extension: `cd extension; npm install; npm run build`, then `chrome://extensions`, Developer mode, Load unpacked, pick `extension/dist`.
+- [ ] Pin the extension. Do one practice run of section B in a separate browser profile, then start a new campaign again.
+
+## B. Live walkthrough (about 10 minutes)
+
+1. **Install and join, no code.** Open the extension popup and tick "I agree". There is no prompt for the server.
+   - Expect: the popup shows "Connected". Admin Campaign page shows "Devices joined" go up by one.
+2. **Allow sites one by one.** Open a site from the list below, open the popup, press "Allow this site", approve the browser prompt.
+   The popup closes while the prompt is open; that is normal. Open it again.
+   - Expect: the site is in the list with its counts. A site you did not allow records nothing (try one and show the count stays 0).
+3. **Browse like a normal person.** On each allowed site, stay on a page for 4 seconds, then click an article or link. Repeat on several pages.
+   - Each page held for 3 seconds is one view. A click on a link afterwards is one tap. You need **20 views and 2 taps** in total.
+   - Expect: the popup shows views and taps per site, kept on this computer.
+4. **Show the local model.** DevTools for the extension: `chrome://extensions`, click "service worker" under the extension, Application tab,
+   Extension storage, Local. `events` is the local cache of what was seen. After step 5, `localModel` holds the local weights next to
+   the server weights it started from.
+5. **The update is sent by itself.** There is no button. Once there are 20 views and 2 taps, the extension trains on the device and
+   sends an update, then again after every 5 new views (at most once a minute). Keep the service worker DevTools open on the Network tab
+   (tick Preserve log) to watch it.
+   - `GET /v1/model`: the global model comes down.
+   - `POST /v1/updates`: the update goes up. The body has `base_version`, `n`, `loss_before`, `loss_after` and `blob`. No page, no site name, no list of what was viewed.
+   - Response: `accepted`, `version`, `model_stepped`. The popup's "updates sent" count goes up.
+6. **Show the same update arriving at the server.** Admin console, Model tab: the update appears, the global model version went up and the
+   before/after bars show how far the shared weights moved.
+7. **Private by design.** Show that the admin never receives events or sites, only: device number, size, checksum, model version.
+8. **Survives a restart (optional).** Render, Manual Deploy. After it is back, the Model tab still shows the update and the same version.
+9. **Delete.** Popup, "Delete my data": the local events and the local model are gone from Extension storage and every site is dropped.
+
+## C. Sites to browse (checked against the extension's topic guess)
+
+The topic guess reads the page title, heading, description and host name. These sites were checked by running the extension's classifier on
+each home page. Article pages on the same site usually give the same topic. A fresh browser may differ, so confirm in the popup that
+views go up.
+
+| Topic | Sites that were guessed correctly |
+|---|---|
+| Sports | espncricinfo.com, bbc.com/sport, skysports.com |
+| Tech | gadgets360.com, techcrunch.com, wired.com |
+| Food | bbcgoodfood.com, epicurious.com, zomato.com |
+| Travel | lonelyplanet.com, tripadvisor.in |
+| Fashion | vogue.com, myntra.com, nykaa.com |
+| Finance | moneycontrol.com, nerdwallet.com, bankbazaar.com |
+| Games | pcgamer.com, polygon.com, gamesradar.com, eurogamer.net, store.steampowered.com |
+| Health | healthline.com, webmd.com, mayoclinic.org |
+
+Not guessed (the page title is too generic, or the site blocked the check): gsmarena.com, theverge.com, cnet.com, xda-developers.com,
+ign.com, gamespot.com, fifa.com, espn.in, booking.com, makemytrip.com, investopedia.com, allrecipes.com, seriouseats.com.
+
+Quick route to 20 views: allow 4 or 5 sites from different topics, open 4 article pages on each, hold each page 4 seconds, click one
+link on at least two of them.
+
+## D. If something does not work
+
+| Symptom | Likely cause and fix |
+|---|---|
+| Popup stays on "Connecting..." | The server is asleep or redeploying. Open `/healthz`, wait, press "Try again". |
+| No update is sent | Needs 20 views and 2 taps first, then 5 new views and a minute between updates. Keep browsing allowed sites. |
+| Views stay at 0 on an allowed site | Reload the site after allowing it. The page may not be guessable (see the "not guessed" list). |
+| Model tab says "Waiting for an update" | No device has contributed since the last restart or new campaign. |
+| Admin console is empty after a restart | `DATABASE_URL` is not set on Render, so nothing was saved. |
+| Phone | Chrome on Android cannot run extensions. Use Firefox for Android (see `docs/android-extension-browsers.md`). Untested. |
+
+## E. Known limits to state honestly
+
+- The topic guess is a simple keyword match and skips pages it cannot place.
+- Registration is open and rate-limited per address (30 per hour). There is no stronger protection against a flood of junk updates.
+- The server accepts at most 60 devices in total.
+- The advertiser-matching profiles and shop accounts are not saved to the database yet and reset when the server restarts.
+- The phone path (Firefox for Android) has not been tested on a device.
+- Privacy numbers (epsilon, noise) are for a demonstration and are not a formal guarantee for production use.

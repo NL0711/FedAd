@@ -1,135 +1,124 @@
-// Background worker: stores the events the content script observed on the campaign's site and on sites the user allowed one by one,
-// trains on them, and talks to the server. No browsing history is read; only the sites on the allow-list are ever observed, and
-// only a clipped, noised model update (never the events, pages or host names) leaves this computer.
-import { categoryRates, contribute, getModel, getSchema, register, Refused, type Schema } from "../../frontend/src/phone/client.ts";
-import { buildProfile, buildRows, summarize, type Ev } from "./features.ts";
+// Background worker: joins the campaign on its own, records what the content script sees on the sites the user allowed one by one,
+// trains on this device, and sends a clipped, noised model update when there is enough activity. No browsing history is read; only
+// allowed sites are observed, and only the noised update (never events, pages or host names) leaves this computer.
+//
+// Everything that must happen after a browser permission prompt runs HERE, driven by permissions.onAdded: the toolbar popup closes
+// when the prompt opens, so code waiting in the popup would never run.
+import { contribute, getSchema, register, Refused, type Schema } from "../../frontend/src/phone/client.ts";
+import { buildRows, type Ev } from "./features.ts";
 
-export interface LogEntry {
-  t: number; n: number; categories: Record<string, number>; bytes: number; checksum: number; eps: number; version: number; stepped: boolean;
-  kind?: "profile"; email?: string;
-  /** Predicted click rate per category: this device's own model, the server model it started from, and the server model afterwards.
-   *  Computed here from weights; the local column never leaves this computer. */
-  models?: { name: string; local: number; before: number; after: number }[];
-}
+declare const FEDAD_BASE: string;                                   // set at build time (build.mjs)
+const BASE = FEDAD_BASE.replace(/\/+$/, "");
+
 export interface State {
-  consent: boolean; paused: boolean; base: string; joined: boolean; deviceId: number | null; uploads: number;
-  ceiling: number; log: LogEntry[]; views: number; taps: number;
-  /** Sites the user allowed one by one (origins), and this computer's own per-host counts. Nothing here is ever sent. */
+  consent: boolean; joined: boolean; deviceId: number | null; uploads: number; views: number; taps: number; message: string;
+  /** Sites the user allowed one by one (origins) and this computer's own per-host counts. Nothing here is ever sent. */
   sites: string[]; siteStats: Record<string, { views: number; taps: number }>;
 }
-const DEFAULTS = { consent: false, paused: false, base: "", joined: false, deviceId: null, uploads: 0, ceiling: 150, log: [] as LogEntry[], events: [] as Ev[], sites: [] as string[], localModel: null as unknown };
-const MAX_EVENTS = 2000;
-const MIN_VIEWS = 20, MIN_TAPS = 2;
-const SCRIPT_ID = "fedad-content";
+const DEFAULTS = { consent: false, joined: false, deviceId: null as number | null, uploads: 0, events: [] as Ev[], sites: [] as string[],
+                   localModel: null as unknown, message: "", sentEvents: 0, sentAt: 0 };
+const MAX_EVENTS = 2000, MIN_VIEWS = 20, MIN_TAPS = 2, MIN_NEW_EVENTS = 5, MIN_GAP_MS = 60_000, CEILING = 150;
 
 type Stored = typeof DEFAULTS & { token?: string };
 async function load(): Promise<Stored> { return { ...DEFAULTS, ...(await chrome.storage.local.get(null)) } as Stored; }
 const save = (patch: Record<string, unknown>) => chrome.storage.local.set(patch);
 
+// Events arrive from many pages at once; serialise read-modify-write so none are lost.
+let chain: Promise<unknown> = Promise.resolve();
+const queue = <T>(fn: () => Promise<T>): Promise<T> => (chain = chain.then(fn, fn)) as Promise<T>;
+
 async function publicState(): Promise<State> {
-  const { token: _t, events, ...s } = await load();
+  const { token: _t, events, sentEvents: _a, sentAt: _b, localModel: _c, ...s } = await load();
   const siteStats: State["siteStats"] = {};
   for (const e of events) {
-    const k = e.site ?? new URL(s.base || "http://shop").hostname;
-    const r = (siteStats[k] ??= { views: 0, taps: 0 });
+    const r = (siteStats[e.site ?? "?"] ??= { views: 0, taps: 0 });
     r.views++; if (e.y === 1) r.taps++;
   }
   return { ...s, views: events.length, taps: events.filter((e) => e.y === 1).length, siteStats };
 }
 
+// ---- joining: automatic, no code ------------------------------------------------------------------------------------------
+async function join(): Promise<void> {
+  try {
+    const r = await register(BASE, "", "extension");
+    await save({ token: r.token, deviceId: r.device_id, joined: true, uploads: 0, sentEvents: 0, message: "" });
+  } catch (e) {
+    await save({ message: `Could not reach ${BASE}. It may be waking up; try again in a minute.` });
+    throw e;
+  }
+}
+async function ensureJoined() { if (!(await load()).joined) await join(); }
+
+// ---- allowed sites --------------------------------------------------------------------------------------------------------
 const siteScriptId = (origin: string) => "fedad-site-" + origin.replace(/[^a-z0-9]/gi, "_");
+const originOf = (pattern: string) => (/^https?:\/\/[^/*]+\/\*$/.test(pattern) ? pattern.slice(0, -2) : null);
+
 async function allowSite(origin: string) {
   const s = await load();
-  if (!s.consent || !s.joined) throw new Error("Agree and join a campaign first.");
-  if (!/^https?:\/\/[^/]+$/.test(origin)) throw new Error("Enter a site address such as https://example.com");
-  if (!(await chrome.permissions.contains({ origins: [origin + "/*"] }))) throw new Error("The browser did not grant access to that site.");
+  if (!s.consent || origin === BASE) return;
+  if (!(await chrome.permissions.contains({ origins: [origin + "/*"] }))) return;
   try { await chrome.scripting.unregisterContentScripts({ ids: [siteScriptId(origin)] }); } catch { /* none registered */ }
   await chrome.scripting.registerContentScripts([{ id: siteScriptId(origin), matches: [origin + "/*"], js: ["content.js"], runAt: "document_idle", persistAcrossSessions: true }]);
   if (!s.sites.includes(origin)) await save({ sites: [...s.sites, origin] });
+  try { await ensureJoined(); } catch { /* the popup shows the message */ }
+  // Start watching tabs that are already open on this site, so no reload is needed.
+  for (const t of await chrome.tabs.query({ url: origin + "/*" })) {
+    if (t.id !== undefined) await chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["content.js"] }).catch(() => {});
+  }
 }
 /** Stop watching a site and forget everything recorded there. */
 async function forgetSite(origin: string) {
   const s = await load();
+  if (!s.sites.includes(origin)) return;
   try { await chrome.scripting.unregisterContentScripts({ ids: [siteScriptId(origin)] }); } catch { /* none registered */ }
   const host = new URL(origin).hostname;
   await save({ sites: s.sites.filter((o) => o !== origin), events: s.events.filter((e) => e.site !== host) });
 }
+chrome.permissions.onAdded.addListener((p) => {
+  for (const o of (p.origins ?? []).map(originOf)) if (o) void queue(() => allowSite(o));
+});
+chrome.permissions.onRemoved.addListener((p) => {
+  for (const o of (p.origins ?? []).map(originOf)) if (o) void queue(() => forgetSite(o));
+});
 
-// Events arrive from many cards at once; serialise read-modify-write so none are lost.
-let chain: Promise<unknown> = Promise.resolve();
-const queue = <T>(fn: () => Promise<T>): Promise<T> => (chain = chain.then(fn, fn)) as Promise<T>;
-
+// ---- recording ------------------------------------------------------------------------------------------------------------
 async function addEvent(ev: Ev) {
   const s = await load();
-  if (!s.consent || s.paused || !s.joined) return;               // nothing is recorded without consent, or while paused
+  if (!s.consent || !s.joined) return;
   await save({ events: [...s.events, ev].slice(-MAX_EVENTS) });
+  void maybeContribute();
 }
 async function markTap(id: number) {
   const s = await load();
-  if (!s.consent || s.paused) return;
+  if (!s.consent) return;
   await save({ events: s.events.map((e) => (e.id === id ? { ...e, y: 1 } : e)) });
+  void maybeContribute();
 }
 
-async function registerContentScript(base: string) {
-  const match = new URL(base).origin + "/*";
-  try { await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] }); } catch { /* none registered */ }
-  await chrome.scripting.registerContentScripts([{ id: SCRIPT_ID, matches: [match], js: ["content.js"], runAt: "document_idle", persistAcrossSessions: true }]);
-}
-
-async function doContribute(): Promise<{ ok: boolean; message: string; entry?: LogEntry; steps?: string[] }> {
+// ---- training and sending: automatic once there is enough activity -------------------------------------------------------
+let sending = false;
+async function maybeContribute() {
+  if (sending) return;
   const s = await load();
-  if (!s.consent) return { ok: false, message: "No consent given." };
-  if (s.paused) return { ok: false, message: "Paused." };
-  if (!s.joined || !s.token) return { ok: false, message: "Join a campaign first." };
   const taps = s.events.filter((e) => e.y === 1).length;
-  if (s.events.length < MIN_VIEWS || taps < MIN_TAPS) {
-    return { ok: false, message: `Browse the shop first: ${s.events.length} of ${MIN_VIEWS} views seen, ${taps} of ${MIN_TAPS} taps.` };
-  }
-  const S: Schema = await getSchema(s.base);
-  const { X, y } = buildRows(S, s.events);
-  const steps: string[] = [];
+  if (!s.consent || !s.joined || !s.token) return;
+  if (s.events.length < MIN_VIEWS || taps < MIN_TAPS) return;
+  if (s.events.length - s.sentEvents < MIN_NEW_EVENTS || Date.now() - s.sentAt < MIN_GAP_MS) return;
+  sending = true;
   try {
+    await save({ sentAt: Date.now() });                               // also spaces out retries after a failure
+    const S: Schema = await getSchema(BASE);
+    const { X, y } = buildRows(S, s.events);
     const res = await contribute({
-      base: s.base, token: s.token, schema: S, X, y, ceilingPerUpload: s.ceiling, allowNonPrivate: false,
-      uploadsSoFar: s.uploads, onStep: (i, st, d) => { if (st !== "run") steps.push(`${i}:${st}:${d}`); },
+      base: BASE, token: s.token, schema: S, X, y, ceilingPerUpload: CEILING, allowNonPrivate: false, uploadsSoFar: s.uploads, onStep: () => {},
     });
-    let models: LogEntry["models"];
-    try {
-      const fresh = await getModel(s.base);                      // the server model as it is now
-      const local = categoryRates(S, res.proof.wLocal), before = categoryRates(S, res.proof.wGlobal), after = categoryRates(S, fresh.weights);
-      models = local.map((x, i) => ({ name: x.name, local: x.ctr, before: before[i].ctr, after: after[i].ctr }));
-    } catch { /* the comparison is optional */ }
-    const entry: LogEntry = { t: Date.now(), n: s.events.length, categories: summarize(s.events), bytes: res.proof.bytes, checksum: res.proof.checksum,
-                              eps: res.epsCharged, version: res.reply.version, stepped: res.reply.model_stepped, models };
-    // The local model lives in this browser's extension storage (DevTools > Application > Extension storage > Local > localModel).
-    // It is the server model this device started from plus what it learned here; only the clipped, noised update was sent.
-    const labels = [...S.feature_names, "bias"];
-    const localModel = { t: Date.now(), basedOnServerVersion: res.model.version, labels, local: res.proof.wLocal, serverBefore: res.proof.wGlobal };
-    await save({ uploads: s.uploads + 1, log: [entry, ...s.log].slice(0, 50), localModel });
-    return { ok: true, message: "Sent one noised update.", entry, steps };
+    // The local model lives in this browser's extension storage (DevTools > Application > Extension storage > Local > localModel):
+    // the server model this device started from plus what it learned here. Only the clipped, noised update was sent.
+    const localModel = { t: Date.now(), basedOnServerVersion: res.model.version, labels: [...S.feature_names, "bias"], local: res.proof.wLocal, serverBefore: res.proof.wGlobal };
+    await save({ uploads: s.uploads + 1, sentEvents: s.events.length, localModel, message: "" });
   } catch (e) {
-    return { ok: false, message: e instanceof Refused ? e.message : `Failed: ${String(e)}`, steps };
-  }
-}
-
-/** Vertical FL: send ONE locally noised interest profile, keyed by the email the user also uses at the advertiser's shop. */
-async function shareProfile(email: string): Promise<{ ok: boolean; message: string }> {
-  const s = await load();
-  if (!s.consent || s.paused || !s.joined || !s.token) return { ok: false, message: "Consent, join and un-pause first." };
-  if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, message: "Enter the email you use at the shop." };
-  if (s.events.length < MIN_VIEWS) return { ok: false, message: `Browse the shop first (${s.events.length} of ${MIN_VIEWS} views).` };
-  const S = await getSchema(s.base);
-  const pol = await (await fetch(s.base + "/v1/platform/policy")).json();
-  const profile = buildProfile(S, s.events, pol.sigma, pol.clip);
-  if (profile.length !== pol.dims) return { ok: false, message: "Profile layout does not match the server." };
-  const r = await fetch(s.base + "/v1/platform/profile", {
-    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.token}` }, body: JSON.stringify({ email, profile }),
-  });
-  if (!r.ok) return { ok: false, message: `Server refused (${r.status}).` };
-  const entry: LogEntry = { t: Date.now(), n: s.events.length, categories: {}, bytes: JSON.stringify(profile).length, checksum: 0, eps: 0, version: -1,
-                            stepped: false, kind: "profile", email };
-  await save({ log: [entry, ...s.log].slice(0, 50) });
-  return { ok: true, message: "Sent a noised interest profile (14 numbers) with your email, so the advertiser can match you without seeing it." };
+    await save({ message: e instanceof Refused ? e.message : `Could not send an update: ${String(e)}` });
+  } finally { sending = false; }
 }
 
 // Some browsers (Firefox for Android) show no toolbar popup for an extension. Open the same page as a tab once on install.
@@ -143,22 +132,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case "state": return publicState();
       case "event": await queue(() => addEvent(msg.ev as Ev)); return { ok: true };
       case "tap": await queue(() => markTap(Number(msg.id))); return { ok: true };
-      case "consent": await save({ consent: !!msg.value }); return publicState();
-      case "pause": await save({ paused: !!msg.value }); return publicState();
-      case "ceiling": await save({ ceiling: Math.max(1, Number(msg.value) || 150) }); return publicState();
-      case "join": {
-        const base = String(msg.base).replace(/\/+$/, "");
-        const r = await register(base, "", "extension");
-        await save({ base, token: r.token, deviceId: r.device_id, joined: true, uploads: 0, events: [] });
-        await registerContentScript(base);
+      case "consent":
+        await save({ consent: !!msg.value });
+        if (msg.value) await ensureJoined().catch(() => {});
         return publicState();
-      }
+      case "retry": await join().catch(() => {}); return publicState();
       case "allowSite": await queue(() => allowSite(String(msg.origin))); return publicState();
       case "forgetSite": await queue(() => forgetSite(String(msg.origin))); return publicState();
-      case "contribute": return doContribute();
-      case "profile": return shareProfile(String(msg.email).trim().toLowerCase());
       case "delete": {                       // wipes everything this extension stores and stops observing; the server keeps only the model
-        try { await chrome.scripting.unregisterContentScripts(); } catch { /* none registered */ }   // the campaign site and every allowed site
+        try { await chrome.scripting.unregisterContentScripts(); } catch { /* none registered */ }
         await queue(() => chrome.storage.local.clear());
         return publicState();
       }

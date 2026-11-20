@@ -5,48 +5,19 @@
   <h1>FedAd Contributor</h1>
 
   <section id="consent">
-    <p><b>What this watches:</b> the campaign shop you join, plus any other sites you allow yourself, one at a time. On those it
-    notes a topic guess for the pages you view and whether you click, with the hour. It does not read your browsing history or any site
-    you have not allowed.</p>
-    <p><b>What leaves:</b> only one model update, clipped and with random noise added here, plus the number of views. No page URLs,
-    no site names, no list of what you viewed. The server cannot tell which update is yours from its contents.</p>
-    <p><b>Your controls:</b> pause, delete everything this extension stores, and a log of every send below. Contributing is always a
-    button you press.</p>
-    <label class="row"><input type="checkbox" id="agree"> I understand and agree</label>
-  </section>
-
-  <section id="join" hidden>
-    <p>Could not connect to the server. Check your connection and try again.</p>
-    <button id="joinBtn">Try again</button>
+    <p>Learns what you are interested in on the sites you allow, on this device. Only a clipped, noised model update is ever sent: no pages,
+    no site names.</p>
+    <label class="row"><input type="checkbox" id="agree"> I agree</label>
   </section>
 
   <section id="main" hidden>
-    <div class="row"><span id="status"></span></div>
-    <label>Privacy ceiling per upload (epsilon) <input id="ceiling" type="number" min="1"></label>
-    <div class="row">
-      <button id="go">Contribute now</button>
-      <button id="pause" class="ghost">Pause</button>
-    </div>
-    <h2>Sites I allow</h2>
-    <p>Learning happens only on the sites listed here, one by one. Each page gets an on-device topic guess; the page text and address
-    are never stored or sent. Removing a site stops watching it and deletes what was recorded there.</p>
+    <p id="status"></p>
     <label>Site address <input id="site" placeholder="https://example.com"></label>
-    <button id="allow" class="ghost">Allow this site</button>
+    <button id="allow">Allow this site</button>
     <ul id="sites"></ul>
-    <h2>Advertiser matching (optional)</h2>
-    <p>Lets an advertiser learn which kinds of people buy, without seeing you. This sends <b>your shop email</b> and a 14-number
-    interest profile with noise added here. The advertiser only sees group-level results.</p>
-    <label>Email you use at the shop <input id="email" type="email" placeholder="you@example.com"></label>
-    <label class="row"><input type="checkbox" id="agree2"> I agree to send my email and noised profile</label>
-    <button id="share" class="ghost" disabled>Send profile</button>
     <p id="msg" role="status"></p>
-    <h2>Local model vs server model</h2>
-    <p>Predicted click rate per category after your latest contribution. <b>Local</b> is trained on this device only and never leaves it.
-    <b>Server before</b> is the shared model you started from, <b>server now</b> is the shared model today.</p>
-    <table id="models"></table>
-    <h2>What was sent</h2>
-    <ul id="log"></ul>
-    <button id="wipe" class="danger">Delete my data and leave</button>
+    <button id="retry" hidden>Try again</button>
+    <button id="wipe" class="danger">Delete my data</button>
   </section>
   <script type="module" src="popup.js"></script>
 </body>
