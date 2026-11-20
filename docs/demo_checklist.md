@@ -41,7 +41,7 @@ Addresses
 6. **Show the same update arriving at the server.** Admin console, Model tab: the update appears, the global model version went up and the
    before/after bars show how far the shared weights moved.
 7. **Private by design.** Show that the admin never receives events or sites, only: device number, size, checksum, model version.
-   **Advertiser page.** Sign in as the advertiser account and open `/advertiser.html`. It shows only predicted click rate by ad category and
+   **Advertiser page.** Sign in as the advertiser account and open `/advertiser.html`. It shows only predicted page-click rate by topic and
    by time of day, read from the shared model, with the number of contributing devices and the privacy setting. It says "early estimate"
    below 10 devices. It never shows a person, a device, a page or a site.
 8. **Survives a restart (optional).** Render, Manual Deploy. After it is back, the Model tab still shows the update and the same version.

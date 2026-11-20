@@ -27,7 +27,9 @@ const netQuality = () =>
 
 const sensitive = () => !!document.querySelector('input[type="password"], input[autocomplete^="cc-"], input[name*="card" i]');
 
-function record(cat: string, visibleMs: number, tapped: boolean): Ev {
+// `visible_ms` is the same constant for every row. It used to be the real time on the page, which differed between rows created by the dwell
+// timer (>= DWELL_MS, mostly untapped) and rows created by an early click (< DWELL_MS, always tapped): the model could read the label from it.
+function record(cat: string, tapped: boolean): Ev {
   const now = new Date();
   const ev: Ev = {
     id: Date.now() * 1000 + Math.floor(Math.random() * 1000), t: Date.now(), cat, placement: "feed-middle", hour: Math.floor(now.getHours() / 4),
@@ -38,7 +40,7 @@ function record(cat: string, visibleMs: number, tapped: boolean): Ev {
       prev_dwell_s: lastDwell,
       scroll_speed: performance.now() - scroll.t > 300 ? 0 : scroll.speed,
       position, session_min: (Date.now() - t0) / 60000, weekday: (now.getDay() + 6) % 7,
-      screen_w: window.innerWidth, net_quality: netQuality(), visible_ms: visibleMs,
+      screen_w: window.innerWidth, net_quality: netQuality(), visible_ms: DWELL_MS,
     },
   };
   position++;
@@ -49,11 +51,10 @@ function record(cat: string, visibleMs: number, tapped: boolean): Ev {
 
 // ---- one view per page ------------------------------------------------------------------------------------------------------
 // Single-page apps change the path without a reload, so the path is watched and each new path is a new page.
-let pageKey = "", pageStart = 0, pageTimer: number | undefined, pageEv: Ev | undefined;
+let pageKey = "", pageTimer: number | undefined, pageEv: Ev | undefined;
 
 function startPage() {
   pageKey = location.pathname + location.search;
-  pageStart = performance.now();
   pageEv = undefined;
   if (pageTimer !== undefined) clearTimeout(pageTimer);
   pageTimer = window.setTimeout(viewNow, DWELL_MS);
@@ -64,7 +65,7 @@ function viewNow() {
   if (document.visibilityState !== "visible") { pageTimer = window.setTimeout(viewNow, 1000); return; }   // count it once the tab is in front
   if (sensitive()) return;
   const cat = classifyPage();
-  if (cat) pageEv = record(cat, performance.now() - pageStart, false);
+  if (cat) pageEv = record(cat, false);
 }
 
 // ---- taps --------------------------------------------------------------------------------------------------------------------
@@ -88,7 +89,7 @@ function onClick(e: Event) {
   const cat = classifyPage();                                          // clicked before the dwell time: count the view and the tap now
   if (!cat) return;
   if (pageTimer !== undefined) { clearTimeout(pageTimer); pageTimer = undefined; }
-  pageEv = record(cat, performance.now() - pageStart, true);
+  pageEv = record(cat, true);
 }
 document.addEventListener("click", onClick, true);
 document.addEventListener("auxclick", onClick, true);                  // middle click opens the link in a new tab

@@ -62,13 +62,13 @@ function Console() {
         ) : (
           <>
             <div className="metrics">
-              <Metric label="Average predicted click rate" value={pct(m.baseline_ctr ?? 0)} />
+              <Metric label="Average predicted page-click rate" value={pct(m.baseline_ctr ?? 0)} />
               <Metric label="Devices contributed" value={String(m.contributors)} sub={m.early ? "early estimate" : undefined} />
               <Metric label="Model version" value={String(m.version)} />
               {m.eps_per_device != null && <Metric label="Privacy per device" value={`ε ${m.eps_per_device.toFixed(0)}`} />}
             </div>
             <div className="grid2">
-              <section className="card"><h3>By ad category</h3><Bars title="" rows={m.by_category} top={top} /></section>
+              <section className="card"><h3>By topic</h3><Bars title="" rows={m.by_category} top={top} /></section>
               <section className="card"><h3>By time of day</h3><Bars title="" rows={m.by_hour} top={top} /></section>
             </div>
           </>

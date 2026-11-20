@@ -55,14 +55,14 @@ export default function Insights() {
       <h2>Insights</h2>
 
       <div className="metrics">
-        <Metric label="Average predicted click rate" value={pct(ins.baseline_ctr)} />
+        <Metric label="Average predicted page-click rate" value={pct(ins.baseline_ctr)} />
         <Metric label="Updates" value={String(ins.n_updates)} />
         <Metric label="Model version" value={String(ins.version)} />
         {ins.dp && <Metric label="Noise per update" value={`σ ${ins.noise_sigma_per_upload.toFixed(2)}`} />}
       </div>
 
       <section className="card">
-        <h3>Predicted click rate by category and time of day</h3>
+        <h3>Predicted page-click rate by topic and time of day</h3>
         <div className="heat-wrap">
           <table className="heat">
             <thead>
