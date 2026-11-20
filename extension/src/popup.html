@@ -5,10 +5,11 @@
   <h1>FedAd Contributor</h1>
 
   <section id="consent">
-    <p><b>What this watches:</b> only the demo shop you join (one server address), nothing else. It notes which product cards you
-    see and tap, the category, and the hour. It does not read your browsing history or any other site.</p>
-    <p><b>What leaves:</b> one model update, clipped and with random noise added here, plus the number of views. No page URLs, no
-    list of what you viewed. The server cannot tell which update is yours from its contents.</p>
+    <p><b>What this watches:</b> the campaign shop you join, plus any other sites you allow yourself, one at a time. On those it
+    notes a topic guess for the pages you view and whether you click, with the hour. It does not read your browsing history or any site
+    you have not allowed.</p>
+    <p><b>What leaves:</b> only one model update, clipped and with random noise added here, plus the number of views. No page URLs,
+    no site names, no list of what you viewed. The server cannot tell which update is yours from its contents.</p>
     <p><b>Your controls:</b> pause, delete everything this extension stores, and a log of every send below. Contributing is always a
     button you press.</p>
     <label class="row"><input type="checkbox" id="agree"> I understand and agree</label>
@@ -27,6 +28,12 @@
       <button id="go">Contribute now</button>
       <button id="pause" class="ghost">Pause</button>
     </div>
+    <h2>Sites I allow</h2>
+    <p>Learning happens only on the sites listed here, one by one. Each page gets an on-device topic guess; the page text and address
+    are never stored or sent. Removing a site stops watching it and deletes what was recorded there.</p>
+    <label>Site address <input id="site" placeholder="https://example.com"></label>
+    <button id="allow" class="ghost">Allow this site</button>
+    <ul id="sites"></ul>
     <h2>Advertiser matching (optional)</h2>
     <p>Lets an advertiser learn which kinds of people buy, without seeing you. This sends <b>your shop email</b> and a 14-number
     interest profile with noise added here. The advertiser only sees group-level results.</p>

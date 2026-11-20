@@ -2,7 +2,9 @@
 import type { Schema } from "../../frontend/src/phone/client.ts";
 
 /** One product card the user saw on the campaign's site. y = 1 if they clicked it. Same shape the phone page records. */
-export interface Ev { id: number; t: number; cat: string; placement: string; hour: number; dev: number; raw: Record<string, number>; y: number }
+export interface Ev { id: number; t: number; cat: string; placement: string; hour: number; dev: number; raw: Record<string, number>; y: number;
+  /** Host name the event came from. Kept on this computer for the per-site breakdown; encodeRow ignores it, so it is never sent. */
+  site?: string }
 
 export function encodeRow(S: Schema, e: Ev): number[] {
   const row = new Array<number>(S.n_features).fill(0);

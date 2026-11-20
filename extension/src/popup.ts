@@ -22,7 +22,41 @@ function render(s: State) {
     return li;
   }));
   if (!s.log.length) ul.textContent = "Nothing sent yet.";
+  const sl = $("sites");
+  sl.replaceChildren(...s.sites.map((o) => {
+    const li = document.createElement("li");
+    const st = s.siteStats[new URL(o).hostname] ?? { views: 0, taps: 0 };
+    li.append(`${new URL(o).hostname}: ${st.views} views, ${st.taps} taps `);
+    const b = document.createElement("button");
+    b.className = "ghost"; b.textContent = "Remove";
+    b.addEventListener("click", async () => {
+      const r = await send({ type: "forgetSite", origin: o });
+      await chrome.permissions.remove({ origins: [o + "/*"] }).catch(() => {});
+      r.error ? say(r.error) : render(r);
+    });
+    li.append(b);
+    return li;
+  }));
+  if (!s.sites.length) sl.textContent = "No extra sites allowed yet.";
 }
+
+// Prefill the address box with the site in the current tab (the activeTab permission lets us read it while the popup is open).
+chrome.tabs?.query({ active: true, currentWindow: true }).then((t) => {
+  try { const u = new URL(t[0]?.url ?? ""); if (/^https?:$/.test(u.protocol)) ($("site") as HTMLInputElement).value = u.origin; } catch { /* not a web page */ }
+}).catch(() => {});
+
+$("allow").addEventListener("click", async () => {
+  let origin: string;
+  try { const u = new URL(($("site") as HTMLInputElement).value.trim()); if (!/^https?:$/.test(u.protocol)) throw 0; origin = u.origin; }
+  catch { return say("Enter a site address such as https://example.com"); }
+  // The browser asks the user to grant access to exactly this one site (user gesture required).
+  const granted = await chrome.permissions.request({ origins: [origin + "/*"] });
+  if (!granted) return say("Access to that site was not granted, so nothing is watched there.");
+  const r = await send({ type: "allowSite", origin });
+  if (r.error) return say(r.error);
+  say(`Now learning on ${new URL(origin).hostname}. Reload its tabs to start.`);
+  render(r);
+});
 
 $("agree").addEventListener("change", async (ev) => render(await send({ type: "consent", value: (ev.target as HTMLInputElement).checked })));
 
@@ -61,7 +95,9 @@ $("pause").addEventListener("click", async () => {
 $("ceiling").addEventListener("change", async (ev) => render(await send({ type: "ceiling", value: (ev.target as HTMLInputElement).value })));
 $("wipe").addEventListener("click", async () => {
   if (!confirm("Delete the stored token, settings and log, and leave the campaign?")) return;
+  const before: State = await send({ type: "state" });
   render(await send({ type: "delete" }));
+  await chrome.permissions.remove({ origins: [...before.sites, before.base].filter(Boolean).map((o) => new URL(o).origin + "/*") }).catch(() => {});
   ($("agree") as HTMLInputElement).checked = false;
   say("Deleted.");
 });

@@ -1,7 +1,9 @@
-// Content script, injected only on the campaign server's own pages (the demo shop). It watches product cards the site tags with
-// data-fedad-cat / data-fedad-placement: a card counts as VIEWED when 60% is visible for 400 ms, and as TAPPED when clicked.
+// Content script, injected only on the campaign server's own pages and on sites the user explicitly allowed one by one. On tagged
+// cards (data-fedad-cat / data-fedad-placement) a card counts as VIEWED when 60% is visible for 400 ms, and as TAPPED when clicked.
+// On other allowed sites a page counts as one view with an on-device topic guess (see classify.ts).
 // Each event is turned into the phone-schema features here and handed to the background worker; nothing leaves the browser.
 import type { Ev } from "./features.ts";
+import { classifyPage } from "./classify.ts";
 
 const MIN_VISIBLE = 0.6, DWELL_MS = 400;
 const t0 = Date.now();
@@ -29,6 +31,7 @@ function record(cat: string, placement: string, visibleMs: number): Ev {
   const now = new Date();
   const ev: Ev = {
     id: Date.now() * 1000 + Math.floor(Math.random() * 1000), t: Date.now(), cat, placement, hour: Math.floor(now.getHours() / 4), dev: deviceIndex(), y: 0,
+    site: location.hostname,
     raw: {
       recency_min: lastTap ? Math.min(60, (Date.now() - lastTap) / 60000) : 60,
       taps_24h: tapTimes.filter((t) => Date.now() - t < 864e5).length,
@@ -73,6 +76,30 @@ function attach(el: HTMLElement) {
     void chrome.runtime.sendMessage({ type: "tap", id: ev.id });
   });
 }
+
+// ---- other sites the user allowed: one on-device guess per page --------------------------------------------------------------
+// A page with no tagged cards counts as ONE view once it has been visible for PAGE_DWELL_MS and its topic could be guessed. A click
+// on a link or button afterwards counts as the tap for that view. Single-page apps are handled by watching the path.
+const PAGE_DWELL_MS = 3000;
+let pageKey = "", pageTimer: number | undefined, pageEv: Ev | undefined;
+function startPage() {
+  pageKey = location.pathname + location.search;
+  pageEv = undefined;
+  if (pageTimer !== undefined) clearTimeout(pageTimer);
+  pageTimer = window.setTimeout(() => {
+    pageTimer = undefined;
+    if (document.visibilityState !== "visible" || document.querySelector("[data-fedad-cat]")) return;   // tagged sites use their own cards
+    const cat = classifyPage();
+    if (cat) pageEv = record(cat, "feed-middle", PAGE_DWELL_MS);
+  }, PAGE_DWELL_MS);
+}
+document.addEventListener("click", (e) => {
+  if (!pageEv || pageEv.y === 1 || !(e.target as Element | null)?.closest?.("a[href], button")) return;
+  pageEv.y = 1; lastTap = Date.now(); tapTimes.push(lastTap);
+  void chrome.runtime.sendMessage({ type: "tap", id: pageEv.id });
+}, true);
+setInterval(() => { if (location.pathname + location.search !== pageKey) startPage(); }, 1000);
+startPage();
 
 const scan = (root: ParentNode) => root.querySelectorAll<HTMLElement>("[data-fedad-cat]").forEach(attach);
 scan(document);

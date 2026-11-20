@@ -1,5 +1,6 @@
-// Background worker: stores the events the content script observed on the campaign's site, trains on them, and talks to the server.
-// No browsing history is read; the extension only sees pages of the one server the user joined.
+// Background worker: stores the events the content script observed on the campaign's site and on sites the user allowed one by one,
+// trains on them, and talks to the server. No browsing history is read; only the sites on the allow-list are ever observed, and
+// only a clipped, noised model update (never the events, pages or host names) leaves this computer.
 import { contribute, getSchema, register, Refused, type Schema } from "../../frontend/src/phone/client.ts";
 import { buildProfile, buildRows, summarize, type Ev } from "./features.ts";
 
@@ -10,8 +11,10 @@ export interface LogEntry {
 export interface State {
   consent: boolean; paused: boolean; base: string; joined: boolean; deviceId: number | null; uploads: number;
   ceiling: number; log: LogEntry[]; views: number; taps: number;
+  /** Sites the user allowed one by one (origins), and this computer's own per-host counts. Nothing here is ever sent. */
+  sites: string[]; siteStats: Record<string, { views: number; taps: number }>;
 }
-const DEFAULTS = { consent: false, paused: false, base: "", joined: false, deviceId: null, uploads: 0, ceiling: 150, log: [] as LogEntry[], events: [] as Ev[] };
+const DEFAULTS = { consent: false, paused: false, base: "", joined: false, deviceId: null, uploads: 0, ceiling: 150, log: [] as LogEntry[], events: [] as Ev[], sites: [] as string[] };
 const MAX_EVENTS = 2000;
 const MIN_VIEWS = 20, MIN_TAPS = 2;
 const SCRIPT_ID = "fedad-content";
@@ -22,7 +25,31 @@ const save = (patch: Record<string, unknown>) => chrome.storage.local.set(patch)
 
 async function publicState(): Promise<State> {
   const { token: _t, events, ...s } = await load();
-  return { ...s, views: events.length, taps: events.filter((e) => e.y === 1).length };
+  const siteStats: State["siteStats"] = {};
+  for (const e of events) {
+    const k = e.site ?? new URL(s.base || "http://shop").hostname;
+    const r = (siteStats[k] ??= { views: 0, taps: 0 });
+    r.views++; if (e.y === 1) r.taps++;
+  }
+  return { ...s, views: events.length, taps: events.filter((e) => e.y === 1).length, siteStats };
+}
+
+const siteScriptId = (origin: string) => "fedad-site-" + origin.replace(/[^a-z0-9]/gi, "_");
+async function allowSite(origin: string) {
+  const s = await load();
+  if (!s.consent || !s.joined) throw new Error("Agree and join a campaign first.");
+  if (!/^https?:\/\/[^/]+$/.test(origin)) throw new Error("Enter a site address such as https://example.com");
+  if (!(await chrome.permissions.contains({ origins: [origin + "/*"] }))) throw new Error("The browser did not grant access to that site.");
+  try { await chrome.scripting.unregisterContentScripts({ ids: [siteScriptId(origin)] }); } catch { /* none registered */ }
+  await chrome.scripting.registerContentScripts([{ id: siteScriptId(origin), matches: [origin + "/*"], js: ["content.js"], runAt: "document_idle", persistAcrossSessions: true }]);
+  if (!s.sites.includes(origin)) await save({ sites: [...s.sites, origin] });
+}
+/** Stop watching a site and forget everything recorded there. */
+async function forgetSite(origin: string) {
+  const s = await load();
+  try { await chrome.scripting.unregisterContentScripts({ ids: [siteScriptId(origin)] }); } catch { /* none registered */ }
+  const host = new URL(origin).hostname;
+  await save({ sites: s.sites.filter((o) => o !== origin), events: s.events.filter((e) => e.site !== host) });
 }
 
 // Events arrive from many cards at once; serialise read-modify-write so none are lost.
@@ -113,10 +140,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
         await registerContentScript(base);
         return publicState();
       }
+      case "allowSite": await queue(() => allowSite(String(msg.origin))); return publicState();
+      case "forgetSite": await queue(() => forgetSite(String(msg.origin))); return publicState();
       case "contribute": return doContribute();
       case "profile": return shareProfile(String(msg.email).trim().toLowerCase());
       case "delete": {                       // wipes everything this extension stores and stops observing; the server keeps only the model
-        try { await chrome.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] }); } catch { /* none registered */ }
+        try { await chrome.scripting.unregisterContentScripts(); } catch { /* none registered */ }   // the campaign site and every allowed site
         await queue(() => chrome.storage.local.clear());
         return publicState();
       }
