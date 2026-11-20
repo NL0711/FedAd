@@ -36,6 +36,7 @@ export default function Campaign() {
   return (
     <>
       <h2>Campaign</h2>
+      {error && <Notice kind="error" title="Not up to date">{error}. Sign out and sign in again.</Notice>}
 
       {snap.devices.length === 0 ? (
         <p className="status">No devices have joined yet.</p>

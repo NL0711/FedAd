@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import { accessToken } from "./supabase";
+import { accessToken, supabase } from "./supabase";
 import "./styles.css";
 import "./admin.css";
 
@@ -20,6 +20,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
 async function start() {
   const probe = await fetch("/api/live").catch(() => null);
   if (probe && probe.status === 403) {
+    await supabase.auth.signOut();                   // a stale or role-less session would bounce between this page and the login page
     location.replace("/login.html");
     return;
   }
