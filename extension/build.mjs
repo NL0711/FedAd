@@ -8,6 +8,8 @@ mkdirSync("dist", { recursive: true });
 await build({
   entryPoints: { background: "src/background.ts", popup: "src/popup.ts", content: "src/content.ts" },
   bundle: true, format: "esm", target: "chrome110", outdir: "dist", minify: false, logLevel: "info",
+  // Server the extension joins automatically. Build for production with: FEDAD_BASE=https://your-app.example npm run build
+  define: { FEDAD_BASE: JSON.stringify(process.env.FEDAD_BASE ?? "http://localhost:8000") },
 });
 cpSync("manifest.json", "dist/manifest.json");
 cpSync("src/popup.html", "dist/popup.html");

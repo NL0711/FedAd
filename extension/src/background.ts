@@ -135,7 +135,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       case "ceiling": await save({ ceiling: Math.max(1, Number(msg.value) || 150) }); return publicState();
       case "join": {
         const base = String(msg.base).replace(/\/+$/, "");
-        const r = await register(base, String(msg.code), "extension");
+        const r = await register(base, "", "extension");
         await save({ base, token: r.token, deviceId: r.device_id, joined: true, uploads: 0, events: [] });
         await registerContentScript(base);
         return publicState();

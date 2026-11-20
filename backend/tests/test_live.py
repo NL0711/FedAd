@@ -60,8 +60,7 @@ def test_schema_and_policy_expose_sigma(api):
 
 def test_join_code_token_and_contribution_flow(api):
     c, code = api
-    assert c.post("/v1/register", json={"join_code": "WRONG1"}).status_code == 403
-    reg = c.post("/v1/register", json={"join_code": code.lower(), "label": "my phone"}).json()
+    reg = c.post("/v1/register", json={"label": "my phone"}).json()      # open registration: no join code needed
     hdr = {"Authorization": f"Bearer {reg['token']}"}
     m = c.get("/v1/model").json()
     body = _upload_body(m, _device_data())

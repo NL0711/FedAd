@@ -385,15 +385,14 @@ function openLearn() {
   const paint = () => {
     const dev = fl();
     if (!dev) {
-      const code = h("input", { class: "field", placeholder: "Join code", value: new URLSearchParams(location.search).get("code") ?? ls.get(K.code) ?? "", autocapitalize: "characters", maxlength: 8 }) as HTMLInputElement;
       const err = h("div", { class: "err" });
-      body.replaceChildren(h("h2", {}, "Private learning"), code, err, h("button", { class: "btn green", style: "width:100%;flex:none", onclick: async () => {
+      body.replaceChildren(h("h2", {}, "Private learning"), err, h("button", { class: "btn green", style: "width:100%;flex:none", onclick: async () => {
         try {
-          const r = await register("", code.value.trim(), session ? session.email.split("@")[0].slice(0, 12) : "guest phone");
-          ls.set(K.fl, JSON.stringify({ token: r.token, id: r.device_id })); ls.set(K.code, code.value.trim()); ls.set(K.uploads, "0");
+          const r = await register("", "", session ? session.email.split("@")[0].slice(0, 12) : "guest phone");
+          ls.set(K.fl, JSON.stringify({ token: r.token, id: r.device_id })); ls.set(K.uploads, "0");
           paint();
-        } catch (e) { err.textContent = e instanceof ApiError && e.status === 403 ? "Wrong code" : "Cannot join"; }
-      } }, "Join"));
+        } catch (e) { err.textContent = e instanceof ApiError && e.status === 429 ? "Too many sign-ups from this network, try later" : "Cannot join"; }
+      } }, "Turn on"));
       return;
     }
     const taps = events.filter((e) => e.y === 1).length;

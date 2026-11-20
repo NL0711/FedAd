@@ -210,8 +210,13 @@ def lan_ips() -> List[str]:
 # ---- device-facing endpoints ------------------------------------------------------------------------------------------
 
 class RegisterBody(BaseModel):
-    join_code: str = Field(max_length=16)
+    join_code: str = Field("", max_length=16)       # no longer needed: kept only so older clients that still send one keep working
     label: str = Field("", max_length=24)
+
+
+# Registration is open (installing the extension or turning on learning on the store is enough), so it is rate-limited per address.
+REGISTER_LIMIT, REGISTER_WINDOW_S = 30, 3600
+_REGISTERED: dict = {}
 
 
 @router.get("/v1/schema")
@@ -231,8 +236,12 @@ def get_status() -> dict:
 
 @router.post("/v1/register")
 def register(body: RegisterBody, request: Request) -> dict:
-    if not hmac.compare_digest(body.join_code.strip().upper(), CAMPAIGN.join_code):
-        raise HTTPException(403, "wrong join code")
+    who = request.client.host if request.client else "?"
+    now = time.time()
+    recent = [t for t in _REGISTERED.get(who, []) if now - t < REGISTER_WINDOW_S]
+    if len(recent) >= REGISTER_LIMIT:
+        raise HTTPException(429, "too many registrations from this address, try again later")
+    _REGISTERED[who] = recent + [now]
     d = CAMPAIGN.register(body.label.strip())
     log.info("REGISTER device=#%d label=%r ip=%s | policy: eps_total=%.0f uploads<=%d sigma=%.3f accountant=rdp", d.id, d.label,
              request.client.host if request.client else "?", CAMPAIGN.cfg.eps_total, CAMPAIGN.cfg.rounds, CAMPAIGN.coord.policy()["sigma"])
@@ -298,6 +307,7 @@ def live_snapshot(request: Request) -> dict:
 @router.post("/api/live/reset")
 def live_reset(policy: CampaignPolicy) -> dict:
     global CAMPAIGN
+    _REGISTERED.clear()
     CAMPAIGN = Campaign(policy)
     log.info("CAMPAIGN new code=%s eps_total=%.0f uploads/device=%d buffer_k=%d dp=%s prior_ctr=%.2f", CAMPAIGN.join_code, policy.eps_total,
              policy.max_uploads, policy.buffer_k, policy.dp, policy.prior_ctr)

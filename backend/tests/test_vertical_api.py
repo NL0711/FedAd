@@ -22,10 +22,10 @@ def c(monkeypatch):
 
 def _populate(c, n=60, seed=0):
     r = np.random.default_rng(seed)
-    code = live.CAMPAIGN.join_code
     for i in range(n):
         email = f"u{i}@example.com"
-        tok = c.post("/v1/register", json={"join_code": code, "label": "ext"}).json()["token"]
+        live._REGISTERED.clear()                      # 60 devices from one test address would trip the per-address limit
+        tok = c.post("/v1/register", json={"label": "ext"}).json()["token"]
         interest = int(r.integers(0, 8))
         x = np.full(v.DIMS, 0.02)
         x[interest] = 0.8

@@ -58,19 +58,24 @@ $("allow").addEventListener("click", async () => {
   render(r);
 });
 
-$("agree").addEventListener("change", async (ev) => render(await send({ type: "consent", value: (ev.target as HTMLInputElement).checked })));
-
-$("joinBtn").addEventListener("click", async () => {
-  const base = ($("base") as HTMLInputElement).value.trim().replace(/\/+$/, "");
-  const code = ($("code") as HTMLInputElement).value.trim();
-  if (!/^https?:\/\//.test(base)) return say("Enter the server address starting with http:// or https://");
+// Joining is automatic: agreeing is the only step. The server address is fixed when the extension is built.
+declare const FEDAD_BASE: string;
+async function connect() {
+  const base = FEDAD_BASE.replace(/\/+$/, "");
   // Ask the browser for access to exactly this server, nothing else (user gesture required).
   const granted = await chrome.permissions.request({ origins: [new URL(base).origin + "/*"] });
-  if (!granted) return say("Permission to contact that server was not granted.");
-  const r = await send({ type: "join", base, code });
-  if (r.error) return say(r.error);
+  if (!granted) return say("Permission to contact the server was not granted.");
+  const r = await send({ type: "join", base });
+  if (r.error) return say("Could not connect to the server.");
   render(r);
+}
+$("agree").addEventListener("change", async (ev) => {
+  const on = (ev.target as HTMLInputElement).checked;
+  const s: State = await send({ type: "consent", value: on });
+  render(s);
+  if (on && !s.joined) await connect();
 });
+$("joinBtn").addEventListener("click", connect);
 
 $("go").addEventListener("click", async () => {
   say("Training and sending...");

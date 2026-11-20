@@ -46,13 +46,14 @@ python -m fedad.demo --deep             # older single-seed table -> results/dem
 Free instances sleep after idle time and lose all state on restart (campaign, accounts, model): wake it before the demo. The shop keeps
 emails and passwords in memory: use throwaway ones. Benchmark runs (Criteo) are not available on the deployed service, only the saved results.
 
-## Perks store and the browser extension
+## The browser extension
 
-`/store.html` is a demo gift-card and voucher store (Perks) on the shop API. Product cards carry `data-fedad-cat` and
-`data-fedad-placement`. The extension (`extension/`) injects a content script on the one server a user joins, records which cards were
-seen and tapped, trains on the device and contributes a noised update; no browsing history is read. The old Flutter Android shell
-(`mobile/`) was removed. Build and load: `cd extension && npm install && npm run build`, then load `dist` unpacked in Chrome or Edge
-(`dist-firefox` for Firefox, including Firefox for Android through `web-ext run -t firefox-android`).
+The extension (`extension/`) joins the campaign automatically when the user agrees: there is no join code. It learns on sites the
+user allows one by one (an on-device topic guess per page, plus product cards that carry `data-fedad-cat` and `data-fedad-placement`),
+trains on the device and contributes only a clipped, noised update; no browsing history is read. Registration is open and rate-limited
+per address. Build and load: `cd extension && npm install && npm run build` (set `FEDAD_BASE=https://your-server` to point it at the
+deployed backend), then load `dist` unpacked in Chrome or Edge (`dist-firefox` for Firefox, including Firefox for Android through
+`web-ext run -t firefox-android`).
 
 ## Federated runtime: Flower, and what this repo adds to it
 

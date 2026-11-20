@@ -42,7 +42,7 @@ export default function Campaign() {
     setBusy(true);
     try {
       await resetCampaign(draft);
-      setMsg("New campaign started. Phones must join again with the new code.");
+      setMsg("New campaign started. Devices must join again.");
     } catch (e) {
       setMsg(`Could not start: ${(e as Error).message}`);
     }
@@ -63,10 +63,9 @@ export default function Campaign() {
             <div className="join">
               <Qr text={url} />
               <div>
-                <div className="metric-label">Join code</div>
-                <div className="code">{snap.join.code}</div>
-                <div className="metric-label" style={{ marginTop: "0.6rem" }}>Or type this address in the phone's browser</div>
+                <div className="metric-label">Or type this address in the phone's browser</div>
                 <code className="url">{url}</code>
+                <p className="note" style={{ marginTop: "0.6rem" }}>No code needed. Anyone who installs the browser extension joins automatically.</p>
               </div>
             </div>
           ) : (
@@ -80,7 +79,7 @@ export default function Campaign() {
               networks, and keep the phone on the same Wi-Fi. This admin page stays local to this laptop either way.
             </Notice>
           )}
-          <p className="note">Plain HTTP on your local network: fine for a demo on a Wi-Fi you trust, not for the internet. The join code gates registration; nothing stronger is implemented.</p>
+          <p className="note">Plain HTTP on your local network: fine for a demo on a Wi-Fi you trust, not for the internet. Registration is open and rate-limited per address; nothing stronger is implemented.</p>
         </Card>
 
         <Card title="2. Privacy policy for this campaign">
