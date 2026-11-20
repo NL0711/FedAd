@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FedAd Contributor: privacy policy</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f6f6f4; color: #1a1a1a; font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      main { max-width: 720px; margin: 32px auto; background: #fff; border: 1px solid #e3e3df; border-radius: 12px; padding: 28px 32px; }
+      h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.02em; }
+      h2 { margin: 28px 0 6px; font-size: 18px; }
+      p, li { margin: 6px 0; }
+      .muted { color: #555; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>FedAd Contributor: privacy policy</h1>
+      <p class="muted">Last updated 20 November 2026</p>
+
+      <h2>What the extension does</h2>
+      <p>FedAd Contributor learns which topics you click on, on your own device, and sends the FedAd campaign server one privacy-protected
+      model update. It is part of a research and demonstration project on federated learning.</p>
+
+      <h2>What it reads, on your device</h2>
+      <p>On the pages you open, it reads the page title, headings, menu links, the words in the address, the description and keywords, and the
+      text and address of links that are on screen. It uses them only to pick one topic from a fixed list of eight (sports, tech, food, travel,
+      fashion, finance, games, health). That text and those addresses are not stored and are never sent anywhere. It skips pages that contain
+      a password or card field, and it does nothing in private windows unless you allow that in your browser.</p>
+
+      <h2>What it stores, on your device</h2>
+      <ul>
+        <li>For each link you saw: its topic, the time of day in four-hour blocks, your device type, where on the page it was, whether you clicked it, a few timing numbers, and for a click how long you stayed on the next page.</li>
+        <li>The model trained on this device and a random device token.</li>
+      </ul>
+      <p>It does not store page addresses, site names, page text or your identity.</p>
+
+      <h2>What it sends</h2>
+      <p>Only to the FedAd server (https://fedad.onrender.com):</p>
+      <ul>
+        <li>A request to join, which creates a random device number and token. No name, email or account.</li>
+        <li>A request for the current shared model.</li>
+        <li>One update at a time: a list of numbers describing how this device would change the model, limited in size and with random noise added on your device before it leaves, together with the number of examples it was trained on and two loss values. The number of examples and the loss values are not covered by the noise.</li>
+      </ul>
+      <p>No pages, addresses, site names, topics, or lists of what you viewed are sent. The server cannot tell which update is yours from its contents.</p>
+
+      <h2>What the server keeps</h2>
+      <p>The combined model, a history of recent updates (their size and a checksum), and a record of each device (its number, a hash of its token, how many updates it sent). This is stored in a database. It is used to show the model to the people running the campaign and is not sold or shared for advertising.</p>
+
+      <h2>Your controls</h2>
+      <p>"Delete my data" in the extension removes everything stored on your device. The server keeps the combined model, which cannot be split back into one device's contribution. Uninstalling the extension stops all collection.</p>
+
+      <h2>Limits</h2>
+      <p>The privacy settings are a demonstration and are not a formal guarantee for production use. The extension asks for access to all websites because it needs to read each page's title, headings and links on your device; it does not use that access for anything else.</p>
+
+      <h2>Contact</h2>
+      <p>Questions or deletion requests: [add the contact email of the project owner here].</p>
+    </main>
+  </body>
+</html>
