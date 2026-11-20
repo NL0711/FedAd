@@ -13,6 +13,6 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: false,
-    rollupOptions: { input: { main: resolve(__dirname, "index.html"), phone: resolve(__dirname, "phone.html"), advertiser: resolve(__dirname, "advertiser.html"), login: resolve(__dirname, "login.html") } },
+    rollupOptions: { input: { main: resolve(__dirname, "index.html"), phone: resolve(__dirname, "phone.html"), advertiser: resolve(__dirname, "advertiser.html"), login: resolve(__dirname, "login.html"), store: resolve(__dirname, "store.html") } },
   },
 });

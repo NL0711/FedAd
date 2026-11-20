@@ -9,7 +9,7 @@ function render(s: State) {
   $("join").hidden = !s.consent || s.joined;
   $("main").hidden = !(s.consent && s.joined);
   if (!s.joined) return;
-  $("status").textContent = `Joined (device #${s.deviceId}). Uploads so far: ${s.uploads}.${s.paused ? " Paused." : ""}`;
+  $("status").textContent = `Joined (device #${s.deviceId}). Seen on the shop: ${s.views} views, ${s.taps} taps. Uploads so far: ${s.uploads}.${s.paused ? " Paused." : ""}`;
   $("pause").textContent = s.paused ? "Resume" : "Pause";
   ($("go") as HTMLButtonElement).disabled = s.paused;
   ($("ceiling") as HTMLInputElement).value = String(s.ceiling);
@@ -39,9 +39,9 @@ $("joinBtn").addEventListener("click", async () => {
 });
 
 $("go").addEventListener("click", async () => {
-  say("Reading history, training, sending...");
+  say("Training and sending...");
   ($("go") as HTMLButtonElement).disabled = true;
-  const r = await send({ type: "contribute", screenWidth: screen.width });
+  const r = await send({ type: "contribute" });
   say(r.error ?? r.message);
   render(await send({ type: "state" }));
 });
@@ -66,8 +66,4 @@ $("wipe").addEventListener("click", async () => {
   say("Deleted.");
 });
 
-// Some browsers (Firefox for Android at the time of writing) expose no history API to extensions. Say so instead of failing later.
-const hasHistory = typeof chrome.history?.search === "function";
-$("nohistory").hidden = hasHistory;
-if (!hasHistory) { $("consent").hidden = true; $("join").hidden = true; $("main").hidden = true; }
-else send<State>({ type: "state" }).then(render);
+send<State>({ type: "state" }).then(render);

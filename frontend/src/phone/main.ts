@@ -197,7 +197,8 @@ function visual(p: Product, cls: string): HTMLElement {
 }
 function card(p: Product, placement: string): HTMLElement {
   const lo = Math.min(...p.amounts);
-  const el = h("button", { class: "card" }, visual(p, "pic"), h("div", { class: "nm" }, p.title),
+  // data-* attributes are the public contract a browser extension (extension/src/content.ts) reads: category and placement.
+  const el = h("button", { class: "card", "data-fedad-cat": p.category, "data-fedad-placement": placement }, visual(p, "pic"), h("div", { class: "nm" }, p.title),
     h("div", { class: "pr" }, `from ${inr(sale(lo, p.off))}`, p.off ? h("span", { class: "off" }, `${p.off}%`) : ""));
   el.addEventListener("click", () => { tapped(el, p, placement); openProduct(p); });
   watch(el, p, placement);

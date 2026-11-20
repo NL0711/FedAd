@@ -15,3 +15,6 @@ data/
 *.apk
 mobile/build/
 mobile/.dart_tool/
+
+# the removed Flutter shell leaves local build output and the signing key here: never commit any of it
+mobile/

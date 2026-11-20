@@ -6,7 +6,7 @@ import { execSync } from "node:child_process";
 rmSync("dist", { recursive: true, force: true });
 mkdirSync("dist", { recursive: true });
 await build({
-  entryPoints: { background: "src/background.ts", popup: "src/popup.ts" },
+  entryPoints: { background: "src/background.ts", popup: "src/popup.ts", content: "src/content.ts" },
   bundle: true, format: "esm", target: "chrome110", outdir: "dist", minify: false, logLevel: "info",
 });
 cpSync("manifest.json", "dist/manifest.json");
@@ -21,7 +21,7 @@ rmSync("dist-firefox", { recursive: true, force: true });
 cpSync("dist", "dist-firefox", { recursive: true });
 const m = JSON.parse(readFileSync("manifest.json", "utf8"));
 m.background = { scripts: ["background.js"], type: "module" };
-m.browser_specific_settings = { gecko: { id: "fedad-contributor@example.org", data_collection_permissions: { required: ["browsingActivity"] } }, gecko_android: {} };
+m.browser_specific_settings = { gecko: { id: "fedad-contributor@example.org", data_collection_permissions: { required: ["websiteActivity"] } }, gecko_android: {} };
 writeFileSync("dist-firefox/manifest.json", JSON.stringify(m, null, 2));
 
 if (process.argv.includes("--zip")) {

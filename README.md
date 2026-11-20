@@ -41,12 +41,13 @@ python -m fedad.demo --deep             # older single-seed table -> results/dem
 Free instances sleep after idle time and lose all state on restart (campaign, accounts, model): wake it before the demo. The shop keeps
 emails and passwords in memory: use throwaway ones. Benchmark runs (Criteo) are not available on the deployed service, only the saved results.
 
-## Android app (`mobile/`)
+## Perks store and the browser extension
 
-A Flutter shell around the phone shop, signed with a release key. `cd mobile && flutter build apk --release` writes
-`build/app/outputs/flutter-apk/app-release.apk`. First launch asks for the server address (the Render URL, or `192.168.x.x:8000` on
-the same Wi-Fi); triple-tap the top-left corner to change it. Keep `mobile/android/app/perks-release.jks` and `key.properties`: they
-are not committed, and a lost key means a new APK cannot update an installed one.
+`/store.html` is a demo gift-card and voucher store (Perks) on the shop API. Product cards carry `data-fedad-cat` and
+`data-fedad-placement`. The extension (`extension/`) injects a content script on the one server a user joins, records which cards were
+seen and tapped, trains on the device and contributes a noised update; no browsing history is read. The old Flutter Android shell
+(`mobile/`) was removed. Build and load: `cd extension && npm install && npm run build`, then load `dist` unpacked in Chrome or Edge
+(`dist-firefox` for Firefox, including Firefox for Android through `web-ext run -t firefox-android`).
 
 ## Federated runtime: Flower, and what this repo adds to it
 
