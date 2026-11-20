@@ -2,7 +2,7 @@
 // aggregates read from the global model: no identifiers, no per-person or per-device data.
 import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Card, Metric, Notice } from "./components";
+import { Metric, Notice } from "./components";
 import { accessToken, signOutAndGo } from "./supabase";
 import "./styles.css";
 import "./admin.css";
@@ -25,19 +25,18 @@ async function api<T>(path: string): Promise<T> {
 }
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
-function Bars({ rows, top }: { rows: Rate[]; top: number }) {
+function Bars({ title, rows, top }: { title: string; rows: Rate[]; top: number }) {
   return (
-    <table>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.name}>
-            <td style={{ width: "8rem" }}>{r.name}</td>
-            <td><div style={{ background: "#2563eb", height: 14, borderRadius: 3, width: `${Math.max(2, (100 * r.ctr) / top)}%` }} /></td>
-            <td style={{ width: "4.5rem", textAlign: "right" }}>{pct(r.ctr)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="bars">
+      {title && <h4>{title}</h4>}
+      {rows.map((r) => (
+        <div className="bar-row" key={r.name}>
+          <span>{r.name}</span>
+          <span className="bar-track"><i style={{ width: `${Math.max(2, (100 * r.ctr) / top)}%`, background: "#1a1a1a" }} /></span>
+          <span className="bar-val">{pct(r.ctr)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -50,39 +49,30 @@ function Console() {
 
   return (
     <>
-      <header className="app-header"><div className="app-title"><h1>FedAd · Advertiser</h1>
-        <button className="notes-btn" onClick={() => void signOutAndGo()}>Sign out</button></div></header>
+      <header className="app-header">
+        <div className="app-title"><h1>FedAd</h1><button className="notes-btn" onClick={() => void signOutAndGo()}>Sign out</button></div>
+        <nav aria-label="Views"><button aria-selected="true">Predicted click rate</button></nav>
+      </header>
       <main>
-        {err && <Notice kind="error">{err}</Notice>}
-        <Notice title="What this shows">
-          Predicted click rate from a shared model that many people's devices trained together. Each device clipped and noised its own
-          update before sending it, so the server never received anyone's browsing. These are predictions from the model, not measured
-          results and not individual people.
-        </Notice>
-
-        <Card title="The model">
-          <div className="metrics">
-            <Metric label="Devices that contributed" value={String(m?.contributors ?? "-")} />
-            <Metric label="Model version" value={String(m?.version ?? "-")} />
-            <Metric label="Average predicted click rate" value={m?.baseline_ctr == null ? "-" : pct(m.baseline_ctr)} />
-            <Metric label="Privacy (per device)" value={m?.eps_per_device == null ? (m?.dp === false ? "none" : "-") : `ε ${m.eps_per_device.toFixed(0)}`} sub={m?.noise_sigma_per_upload == null ? undefined : `noise σ ${m.noise_sigma_per_upload.toFixed(2)} per update`} />
-          </div>
-        </Card>
-
-        {m?.waiting && <Notice kind="warn">{m.note}</Notice>}
-        {m && !m.waiting && m.early && (
-          <Notice kind="warn">Early estimate: only {m.contributors} device{m.contributors === 1 ? "" : "s"} so far (fewer than {m.min_contributors}). With so few, the model is mostly noise and the numbers will move a lot.</Notice>
+        {err && <Notice kind="error" title="Cannot reach the server">{err}</Notice>}
+        {!m ? (
+          !err && <p className="loading">Loading</p>
+        ) : m.waiting || !m.by_category || !m.by_hour ? (
+          <p className="status">No devices have contributed yet.</p>
+        ) : (
+          <>
+            <div className="metrics">
+              <Metric label="Average predicted click rate" value={pct(m.baseline_ctr ?? 0)} />
+              <Metric label="Devices contributed" value={String(m.contributors)} sub={m.early ? "early estimate" : undefined} />
+              <Metric label="Model version" value={String(m.version)} />
+              {m.eps_per_device != null && <Metric label="Privacy per device" value={`ε ${m.eps_per_device.toFixed(0)}`} />}
+            </div>
+            <div className="grid2">
+              <section className="card"><h3>By ad category</h3><Bars title="" rows={m.by_category} top={top} /></section>
+              <section className="card"><h3>By time of day</h3><Bars title="" rows={m.by_hour} top={top} /></section>
+            </div>
+          </>
         )}
-
-        {m?.by_category && (
-          <Card title="Predicted click rate by ad category"><Bars rows={m.by_category} top={top} /></Card>
-        )}
-        {m?.by_hour && (
-          <Card title="Predicted click rate by time of day" note="Four-hour blocks.">
-            <Bars rows={m.by_hour} top={top} />
-          </Card>
-        )}
-        {m && !m.waiting && m.note && <p className="note">{m.note}</p>}
       </main>
     </>
   );

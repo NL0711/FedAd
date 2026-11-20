@@ -23,7 +23,7 @@ export default function App() {
     <>
       <header className="app-header">
         <div className="app-title">
-          <h1>FedAd Admin</h1>
+          <h1>FedAd</h1>
           <button className="notes-btn" onClick={() => void signOutAndGo()}>Sign out</button>
         </div>
         <nav role="tablist" aria-label="Views">

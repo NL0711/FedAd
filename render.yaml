@@ -8,6 +8,10 @@ services:
     healthCheckPath: /healthz
     envVars:
       - key: SUPABASE_URL
-        value: https://vtwufwokgahgogfdtcrq.supabase.co
+        value: https://ystailcfsejrtmivhulc.supabase.co
+      # The Supabase session pooler string with your database password. Not stored here: Render asks for it (sync: false).
+      # Format: postgresql://postgres.ystailcfsejrtmivhulc:<password>@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+      - key: DATABASE_URL
+        sync: false
       - key: FEDAD_MIN_COHORT
         value: "10"

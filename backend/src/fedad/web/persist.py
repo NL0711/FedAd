@@ -30,6 +30,9 @@ class PostgresStore:
         self._psycopg, self.url = psycopg, url
         with self._conn() as c:
             c.execute(f"create table if not exists {TABLE} (id text primary key, data jsonb not null, updated_at timestamptz not null default now())")
+            # Supabase exposes the public schema through its Data API. With row level security on and no policy, the public (anon) key can
+            # read and write nothing here; this server connects as the postgres role, which is not subject to it.
+            c.execute(f"alter table {TABLE} enable row level security")
 
     def _conn(self):
         return self._psycopg.connect(self.url, connect_timeout=10, autocommit=True)
@@ -55,5 +58,6 @@ def open_store() -> Optional[Store]:
         log.info("PERSIST on: campaign state is saved to Postgres")
         return store
     except Exception as e:                                # a database problem must not stop the server from starting
-        log.error("PERSIST disabled: could not open the database (%s)", type(e).__name__)
+        reason = (str(e).strip().splitlines() or [""])[0].replace(url, "<DATABASE_URL>")       # the first line says why; never the connection string
+        log.error("PERSIST disabled: could not open the database (%s: %s)", type(e).__name__, reason[:200])
         return None

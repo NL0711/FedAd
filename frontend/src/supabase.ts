@@ -1,8 +1,13 @@
 // Supabase client for sign-in. The project URL and the PUBLISHABLE key are public by design (they ship in every web page that uses
-// Supabase), so they live in the source. Never put the secret key (sb_secret_...) in this project.
+// Supabase). They are read at build time from VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY (Vercel: Settings > Environment
+// Variables; locally: frontend/.env.local, see .env.example). Never put the secret key (sb_secret_...) in this project.
 import { createClient } from "@supabase/supabase-js";
 
-export const supabase = createClient("https://vtwufwokgahgogfdtcrq.supabase.co", "sb_publishable_lu9WO7QyhgtFfPSSokZhxw_cKHtX0qy");
+const url = import.meta.env.VITE_SUPABASE_URL || "https://ystailcfsejrtmivhulc.supabase.co";
+const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+if (!key) throw new Error("VITE_SUPABASE_PUBLISHABLE_KEY is not set: add it to the build environment (see frontend/.env.example).");
+
+export const supabase = createClient(url, key);
 
 export type Role = "admin" | "advertiser";
 
