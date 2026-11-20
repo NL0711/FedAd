@@ -1,5 +1,26 @@
 /* Charts and lists for the consoles. Monochrome, like the login page. */
 
+/* header: campaign picker next to Sign out */
+.top-right { display: flex; align-items: center; gap: 12px; }
+.picker select { font: inherit; padding: 6px 12px; border: 1px solid var(--field); border-radius: 8px; background: #fff; color: var(--ink); max-width: 280px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.notice.saved { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.err { color: var(--err); font-size: 13px; margin: 8px 0 0; }
+
+/* new campaign form */
+dialog.modal { border: 1px solid var(--line); border-radius: 12px; padding: 28px; width: min(380px, 92vw); color: var(--ink); background: #fff; }
+dialog.modal::backdrop { background: rgba(26, 26, 26, .35); }
+dialog.modal h3 { font-size: 20px; margin-bottom: 16px; }
+dialog.modal .field { margin: 0 0 12px; }
+dialog.modal .field input[type="text"] { font: inherit; color: var(--ink); padding: 10px; border: 1px solid var(--field); border-radius: 8px; width: 100%; }
+dialog.modal .check { margin-top: 4px; }
+
+/* read-only settings */
+dl.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 24px; margin: 0; }
+dl.settings > div { margin: 0; }
+dl.settings dt { font-size: 13px; color: var(--muted); }
+dl.settings dd { margin: 0; font-weight: 600; }
+
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
 .chip { font: inherit; font-size: 13px; padding: 4px 12px; border: 1px solid var(--field); border-radius: 99px; background: #fff; color: var(--ink); cursor: pointer; }
 .chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }

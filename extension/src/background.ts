@@ -109,6 +109,10 @@ async function maybeContribute() {
     const localModel = { t: Date.now(), basedOnServerVersion: res.model.version, labels: [...S.feature_names, "bias"], local: res.proof.wLocal, serverBefore: res.proof.wGlobal };
     await save({ uploads: s.uploads + 1, sentEvents: s.events.length, localModel, message: "" });
   } catch (e) {
+    if (e instanceof Refused && /Unknown device/.test(e.message)) {
+      await join().catch(() => {});                                   // the campaign was reset or replaced: join the new one, then send on the next round
+      return;
+    }
     await save({ message: e instanceof Refused ? e.message : `Could not send an update: ${String(e)}` });
   } finally { sending = false; }
 }

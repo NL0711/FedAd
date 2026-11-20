@@ -1,42 +1,49 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Metric, Notice } from "../components";
-import { ago, resetCampaign, useLive, type CampaignPolicy } from "../live";
+import { activateCampaign, ago, useCampaigns, useLive } from "../live";
 
 const fmtEps = (x: number) => (x >= 100 ? x.toFixed(0) : x.toFixed(1));
 
 export default function Campaign() {
   const { snap, error } = useLive(1500);
-  const [draft, setDraft] = useState<CampaignPolicy | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
+  const { viewId, activeId, setViewId, refresh } = useCampaigns();
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (snap && !draft) setDraft(snap.campaign);
-  }, [snap, draft]);
+  const [msg, setMsg] = useState("");
 
   if (error && !snap) return <Notice kind="error" title="Cannot reach the server">{error}</Notice>;
-  if (!snap || !draft) return <p className="loading">Loading</p>;
+  if (!snap) return <p className="loading">Loading</p>;
 
+  const saved = !!viewId && viewId !== activeId;               // looking at a campaign that is not collecting
+  const c = snap.campaign;
   const contributions = snap.devices.reduce((s, d) => s + d.uploads, 0);
-  const set = <K extends keyof CampaignPolicy>(k: K, v: CampaignPolicy[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d));
 
-  async function start() {
-    if (!draft) return;
-    if (snap!.devices.length && !window.confirm("Starting a new campaign drops all joined devices and the current model. Continue?")) return;
+  async function makeActive() {
+    if (!window.confirm("Make this campaign the active one? The current one is saved and stops collecting. Devices that joined this one can contribute again.")) return;
     setBusy(true);
+    setMsg("");
     try {
-      await resetCampaign(draft);
-      setMsg("New campaign started");
+      await activateCampaign(snap!.id);
+      setViewId(snap!.id);
+      refresh();
     } catch (e) {
-      setMsg(`Could not start: ${(e as Error).message}`);
+      setMsg((e as Error).message);
     }
     setBusy(false);
   }
 
   return (
     <>
-      <h2>Campaign</h2>
+      <h2>{snap.name}</h2>
       {error && <Notice kind="error" title="Not up to date">{error}. Sign out and sign in again.</Notice>}
+      {saved && (
+        <div className="notice saved">
+          <span>Saved campaign: not collecting. Showing its data as it was.</span>
+          <span className="row" style={{ margin: 0 }}>
+            <button className="btn" disabled={busy} onClick={makeActive}>Make active</button>
+            {msg && <span className="muted" role="status">{msg}</span>}
+          </span>
+        </div>
+      )}
 
       {snap.devices.length === 0 ? (
         <p className="status">No devices have joined yet.</p>
@@ -98,32 +105,13 @@ export default function Campaign() {
 
       <section className="card">
         <h3>Settings</h3>
-        <div className="controls">
-          <div className="field">
-            <label htmlFor="c-eps">Total ε per device: {fmtEps(draft.eps_total)}</label>
-            <input id="c-eps" type="range" min={1} max={5} step={0.05} disabled={!draft.dp} value={Math.log10(draft.eps_total)}
-              onChange={(e) => set("eps_total", Math.round(Math.pow(10, parseFloat(e.target.value))))} />
-          </div>
-          <div className="field">
-            <label htmlFor="c-up">Updates allowed per device</label>
-            <input id="c-up" type="number" min={1} max={100} value={draft.max_uploads} onChange={(e) => set("max_uploads", Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
-          </div>
-          <div className="field">
-            <label htmlFor="c-k">Updates per model step</label>
-            <input id="c-k" type="number" min={1} max={20} value={draft.buffer_k} onChange={(e) => set("buffer_k", Math.max(1, Math.min(20, Number(e.target.value) || 1)))} />
-          </div>
-          <div className="field">
-            <span>Differential privacy</span>
-            <label className="check">
-              <input type="checkbox" checked={draft.dp} onChange={(e) => set("dp", e.target.checked)} />
-              Add noise on the device
-            </label>
-          </div>
-        </div>
-        <div className="row">
-          <button className="btn" disabled={busy} onClick={start}>Start new campaign</button>
-          {msg && <span role="status" className="muted">{msg}</span>}
-        </div>
+        <dl className="settings">
+          <div><dt>Created</dt><dd>{new Date(snap.created * 1000).toLocaleString()}</dd></div>
+          <div><dt>Total ε per device</dt><dd>{c.dp ? fmtEps(c.eps_total) : "no noise"}</dd></div>
+          <div><dt>Updates allowed per device</dt><dd>{c.max_uploads}</dd></div>
+          <div><dt>Updates per model step</dt><dd>{c.buffer_k}</dd></div>
+          <div><dt>Differential privacy</dt><dd>{c.dp ? "on" : "off"}</dd></div>
+        </dl>
       </section>
     </>
   );

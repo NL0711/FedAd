@@ -81,15 +81,28 @@ def test_join_code_token_and_contribution_flow(api):
 
 
 class _MemStore:
-    """Stands in for Postgres: keeps what was written, as JSON text, the way the database would."""
+    """Stands in for Postgres: named rows kept as JSON text, the way the database would."""
     def __init__(self):
-        self.text = None
+        self.rows = {}
 
-    def read(self):
-        return json.loads(self.text) if self.text else None
+    def read(self, key="campaign"):
+        return json.loads(self.rows[key]) if key in self.rows else None
 
-    def write(self, state):
-        self.text = json.dumps(state)
+    def write(self, state, key="campaign"):
+        self.rows[key] = json.dumps(state)
+
+    def keys(self, prefix=""):
+        return sorted(k for k in self.rows if k.startswith(prefix))
+
+    def delete(self, key):
+        self.rows.pop(key, None)
+
+
+def _restart():
+    """What a server restart does: forget everything in memory and load it again from the store."""
+    live.REGISTRY.clear()
+    live.CAMPAIGN = live._initial()
+    return live.CAMPAIGN
 
 
 def test_campaign_survives_a_restart(api, monkeypatch):
@@ -100,13 +113,70 @@ def test_campaign_survives_a_restart(api, monkeypatch):
     hdr = {"Authorization": f"Bearer {reg['token']}"}
     assert c.post("/v1/updates", json=_upload_body(c.get("/v1/model").json(), _device_data()), headers=hdr).status_code == 200
     before = live.CAMPAIGN
-    assert store.text and reg["token"] not in store.text                              # saved, and only the token's hash
-    live.CAMPAIGN = live._initial()                                                    # what a server restart does
-    after = live.CAMPAIGN
+    assert store.rows and reg["token"] not in json.dumps(store.rows)                  # saved, and only the token's hash
+    after = _restart()
     assert after is not before and after.coord.version == before.coord.version == 1
     assert np.array_equal(after.coord.w, before.coord.w) and len(after.uploads) == 1 and len(after.devices) == 1
     assert c.post("/v1/updates", json=_upload_body(c.get("/v1/model").json(), _device_data(seed=1)), headers=hdr).status_code == 200   # same token still works
     assert c.get("/api/live").json()["status"]["version"] == 2
+
+
+def test_campaigns_are_saved_listed_viewed_and_reactivated(api, monkeypatch):
+    c, _ = api
+    store = _MemStore()
+    monkeypatch.setattr(live, "STORE", store)
+    live.REGISTRY.clear()
+    # campaign A: one device, two updates
+    first = c.get("/api/campaigns").json()["active"]
+    reg = c.post("/v1/register", json={"label": "a"}).json()
+    hdr = {"Authorization": f"Bearer {reg['token']}"}
+    for s in range(2):
+        assert c.post("/v1/updates", json=_upload_body(c.get("/v1/model").json(), _device_data(seed=s)), headers=hdr).status_code == 200
+    # starting campaign B keeps A
+    made = c.post("/api/campaigns", json={"name": "Second run", "eps_total": 300, "max_uploads": 5}).json()
+    listed = c.get("/api/campaigns").json()
+    names = {i["id"]: i for i in listed["items"]}
+    assert listed["active"] == made["id"] and names[made["id"]]["name"] == "Second run" and names[made["id"]]["version"] == 0
+    assert names[first]["active"] is False and names[first]["version"] == 2 and names[first]["devices"] == 1 and names[first]["updates"] == 2
+    # the saved campaign can be viewed with its own data, while the active one is empty
+    old = c.get(f"/api/campaigns/{first}").json()
+    assert old["id"] == first and old["status"]["version"] == 2 and len(old["devices"]) == 1
+    assert c.get("/api/live").json()["status"]["version"] == 0
+    assert c.get("/api/campaigns/nope").status_code == 404
+    # it survives a restart, and so does which campaign is active
+    after = _restart()
+    assert after.id == made["id"] and {i["id"] for i in c.get("/api/campaigns").json()["items"]} == {first, made["id"]}
+    # making the old one active again resumes it: the device's token still works
+    assert c.post(f"/api/campaigns/{first}/activate").json()["id"] == first
+    assert c.get("/api/live").json()["status"]["version"] == 2
+    assert c.post("/v1/updates", json=_upload_body(c.get("/v1/model").json(), _device_data(seed=9)), headers=hdr).status_code == 200
+    assert c.post("/api/campaigns/nope/activate").status_code == 404
+
+
+def test_the_old_single_campaign_row_becomes_campaign_1(api, monkeypatch):
+    c, _ = api
+    reg = c.post("/v1/register", json={"label": "a"}).json()
+    assert c.post("/v1/updates", json=_upload_body(c.get("/v1/model").json(), _device_data()), headers={"Authorization": f"Bearer {reg['token']}"}).status_code == 200
+    old = live.CAMPAIGN.to_state()
+    del old["id"]                                              # earlier versions wrote one anonymous row, "campaign"
+    old["policy"].pop("name")
+    store = _MemStore()
+    store.write(old)
+    monkeypatch.setattr(live, "STORE", store)
+    after = _restart()
+    assert after.policy.name == "Campaign 1" and after.coord.version == 1 and len(after.devices) == 1
+    assert store.keys("campaign:") and store.read("active")["id"] == after.id     # now stored the new way
+    assert _restart().id == after.id and _restart().coord.version == 1            # and read from there next time, not from the old row
+
+
+def test_an_untouched_campaign_is_not_kept(api, monkeypatch):
+    c, _ = api
+    monkeypatch.setattr(live, "STORE", _MemStore())
+    live.REGISTRY.clear()
+    c.post("/api/campaigns", json={"name": "one"})
+    c.post("/api/campaigns", json={"name": "two"})             # "one" never got a device, so it is not saved
+    names = [i["name"] for i in c.get("/api/campaigns").json()["items"]]
+    assert names == ["two"]
 
 
 def test_upload_budget_and_malformed(api):

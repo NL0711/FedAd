@@ -52,6 +52,7 @@ log = logging.getLogger("fedad.live")
 
 
 class CampaignPolicy(BaseModel):
+    name: str = Field("", max_length=60)                      # shown in the admin's campaign list; empty means "Campaign N"
     eps_total: float = Field(1000.0, gt=0, le=100000.0)       # demo default: clear insights; lower it live to show the trade-off
     max_uploads: int = Field(10, ge=1, le=100)            # contributions per device; the budget is split over them
     buffer_k: int = Field(1, ge=1, le=20)                 # uploads per model step (1 = every contribution moves the model)
@@ -80,7 +81,8 @@ class Device:
 
 
 class Campaign:
-    def __init__(self, policy: CampaignPolicy):
+    def __init__(self, policy: CampaignPolicy, cid: Optional[str] = None):
+        self.id = cid or secrets.token_hex(4)
         self.policy = policy
         self.cfg = Config(rounds=policy.max_uploads, dp=policy.dp, eps_total=policy.eps_total, accountant="rdp", top_k=policy.top_k,
                           clip_c=1.0, local_epochs=3, lr=0.2, batch=16, n_edges=1)
@@ -115,7 +117,7 @@ class Campaign:
     def to_state(self) -> dict:
         with self.lock:
             return {
-                "policy": self.policy.model_dump(), "created": self.created, "version": self.coord.version,
+                "id": self.id, "policy": self.policy.model_dump(), "created": self.created, "version": self.coord.version,
                 "w": [float(x) for x in self.coord.w], "history": self.coord.history, "uploads_done": {str(k): v for k, v in self.coord.uploads_done.items()},
                 "devices": [{"id": d.id, "label": d.label, "token_hash": d.token_hash, "joined": d.joined, "last_seen": d.last_seen,
                              "uploads": d.uploads, "bytes": d.bytes, "examples": d.examples} for d in self.devices.values()],
@@ -124,7 +126,7 @@ class Campaign:
 
     @classmethod
     def from_state(cls, st: dict) -> "Campaign":
-        c = cls(CampaignPolicy(**st["policy"]))
+        c = cls(CampaignPolicy(**st["policy"]), st.get("id"))
         w = np.asarray(st["w"], dtype=np.float64)
         if w.shape != c.coord.w.shape:
             raise ValueError("saved model does not match the current schema")
@@ -142,9 +144,14 @@ class Campaign:
         if STORE is None:
             return
         try:
-            STORE.write(self.to_state())
+            STORE.write(self.to_state(), key=f"campaign:{self.id}")
         except Exception as e:                              # losing a save must never break a request
             log.error("PERSIST save failed (%s)", type(e).__name__)
+
+    @property
+    def empty(self) -> bool:
+        """Nothing worth keeping: no device ever joined and the model never moved."""
+        return not self.devices and self.coord.version == 0
 
     def submit(self, dev: Device, up: Upload) -> dict:
         before = self.coord.w.copy()
@@ -220,7 +227,7 @@ class Campaign:
 
     def snapshot(self) -> dict:
         st = self.coord.status()
-        return {"policy": self.coord.policy(), "campaign": self.policy.model_dump(), "status": st, "devices": self.ledger(),
+        return {"id": self.id, "name": self.policy.name or "Campaign", "policy": self.coord.policy(), "campaign": self.policy.model_dump(), "status": st, "devices": self.ledger(),
                 "events": self.events[-30:], "insights": self.insights(), "created": self.created,
                 "model": {"names": schema.feature_names() + ["bias"], "weights": [round(float(x), 4) for x in self.coord.w],
                           "uploads": self.uploads[-15:][::-1]},
@@ -230,21 +237,105 @@ class Campaign:
 STORE = persist.open_store()
 
 
-def _initial() -> Campaign:
-    """The saved campaign if there is one (a restart resumes where it stopped), otherwise a fresh one."""
+REGISTRY: Dict[str, dict] = {}                              # saved state of every campaign that is not the active one, by id
+_SWITCH = threading.Lock()
+
+
+def _write_active(c: Campaign) -> None:
+    """Save a campaign's own row and mark it as the active one."""
+    c.save()
     if STORE is not None:
         try:
-            st = STORE.read()
-            if st:
-                c = Campaign.from_state(st)
-                log.info("PERSIST restored: model v%d, %d devices, %d updates", c.coord.version, len(c.devices), len(c.uploads))
+            STORE.write({"id": c.id}, key="active")
+        except Exception as e:
+            log.error("PERSIST save failed (%s)", type(e).__name__)
+
+
+def _initial() -> Campaign:
+    """The active campaign as it was (a restart resumes where it stopped), with the other saved campaigns loaded into REGISTRY."""
+    if STORE is not None:
+        try:
+            for key in STORE.keys("campaign:"):
+                st = STORE.read(key)
+                if st:
+                    REGISTRY[key.split(":", 1)[1]] = st
+            active = (STORE.read("active") or {}).get("id")
+            if active not in REGISTRY:
+                if REGISTRY:
+                    active = max(REGISTRY, key=lambda k: REGISTRY[k]["created"])      # no pointer: the newest one
+                else:
+                    old = STORE.read()                        # the single-campaign row of earlier versions becomes the first campaign
+                    if old:
+                        old["id"] = old.get("id") or "first"
+                        old["policy"] = {**old["policy"], "name": old["policy"].get("name") or "Campaign 1"}
+                        REGISTRY[old["id"]] = old
+                        active = old["id"]
+            if active in REGISTRY:
+                c = Campaign.from_state(REGISTRY.pop(active))
+                _write_active(c)                              # also writes an imported old row the new way, so it is not read from the old one again
+                log.info("PERSIST restored: campaign %r, model v%d, %d devices, %d updates; %d other campaigns saved",
+                         c.policy.name or c.id, c.coord.version, len(c.devices), len(c.uploads), len(REGISTRY))
                 return c
         except Exception as e:
-            log.error("PERSIST restore failed, starting fresh (%s)", type(e).__name__)
-    return Campaign(CampaignPolicy())
+            log.error("PERSIST restore failed, starting fresh (%s: %s)", type(e).__name__, (str(e).splitlines() or [""])[0][:160])
+    return Campaign(CampaignPolicy(name="Campaign 1"))
 
 
 CAMPAIGN = _initial()
+
+
+def _set_active() -> None:
+    _write_active(CAMPAIGN)
+
+
+def _archive(c: Campaign) -> None:
+    """Keep a campaign that is being replaced, unless it never did anything."""
+    if c.empty:
+        if STORE is not None:
+            try:
+                STORE.delete(f"campaign:{c.id}")
+            except Exception as e:
+                log.error("PERSIST delete failed (%s)", type(e).__name__)
+        return
+    c.save()
+    REGISTRY[c.id] = c.to_state()
+
+
+def start_campaign(policy: CampaignPolicy) -> Campaign:
+    """Make a new campaign the active one. The one it replaces is saved and can be viewed or made active again."""
+    global CAMPAIGN
+    with _SWITCH:
+        _archive(CAMPAIGN)
+        if not policy.name.strip():
+            policy = policy.model_copy(update={"name": f"Campaign {len(REGISTRY) + 1}"})
+        _REGISTERED.clear()
+        CAMPAIGN = Campaign(policy.model_copy(update={"name": policy.name.strip()}))
+        _set_active()
+    log.info("CAMPAIGN new %r (%s) eps_total=%.0f uploads/device=%d buffer_k=%d dp=%s prior_ctr=%.2f", CAMPAIGN.policy.name, CAMPAIGN.id,
+             policy.eps_total, policy.max_uploads, policy.buffer_k, policy.dp, policy.prior_ctr)
+    return CAMPAIGN
+
+
+def activate_campaign(cid: str) -> Campaign:
+    """Make a saved campaign the active one again: devices that joined it can contribute to it again."""
+    global CAMPAIGN
+    with _SWITCH:
+        if cid == CAMPAIGN.id:
+            return CAMPAIGN
+        if cid not in REGISTRY:
+            raise HTTPException(404, "no such campaign")
+        _archive(CAMPAIGN)
+        CAMPAIGN = Campaign.from_state(REGISTRY.pop(cid))
+        _set_active()
+    log.info("CAMPAIGN active is now %r (%s)", CAMPAIGN.policy.name, CAMPAIGN.id)
+    return CAMPAIGN
+
+
+def _summary(st: dict, active: bool) -> dict:
+    pol = st["policy"]
+    return {"id": st["id"], "name": pol.get("name") or "Campaign", "created": st["created"], "active": active, "version": st["version"],
+            "devices": len(st["devices"]), "updates": sum(d["uploads"] for d in st["devices"]), "eps_total": pol["eps_total"], "dp": pol["dp"],
+            "max_uploads": pol["max_uploads"], "buffer_k": pol["buffer_k"]}
 
 
 def lan_ips() -> List[str]:
@@ -365,10 +456,39 @@ def live_snapshot(request: Request) -> dict:
 
 @router.post("/api/live/reset")
 def live_reset(policy: CampaignPolicy) -> dict:
-    global CAMPAIGN
-    _REGISTERED.clear()
-    CAMPAIGN = Campaign(policy)
-    CAMPAIGN.save()
-    log.info("CAMPAIGN new code=%s eps_total=%.0f uploads/device=%d buffer_k=%d dp=%s prior_ctr=%.2f", CAMPAIGN.join_code, policy.eps_total,
-             policy.max_uploads, policy.buffer_k, policy.dp, policy.prior_ctr)
-    return {"ok": True, "join_code": CAMPAIGN.join_code}
+    """Start a new campaign. The previous one is saved, not dropped (see /api/campaigns)."""
+    c = start_campaign(policy)
+    return {"ok": True, "join_code": c.join_code, "id": c.id}
+
+
+# ---- saved campaigns ---------------------------------------------------------------------------------------------------------
+
+@router.get("/api/campaigns")
+def list_campaigns() -> dict:
+    """Every campaign, newest first: the active one (collecting) and the saved ones (read-only until made active)."""
+    items = [_summary(CAMPAIGN.to_state(), True)] + [_summary(st, False) for st in REGISTRY.values()]
+    return {"active": CAMPAIGN.id, "items": sorted(items, key=lambda x: -x["created"])}
+
+
+@router.post("/api/campaigns")
+def create_campaign(policy: CampaignPolicy) -> dict:
+    c = start_campaign(policy)
+    return {"ok": True, "id": c.id, "name": c.policy.name}
+
+
+@router.get("/api/campaigns/{cid}")
+def campaign_snapshot(cid: str, request: Request) -> dict:
+    """The same snapshot as /api/live, for any saved campaign (read-only)."""
+    from .app import clean
+    if cid == CAMPAIGN.id:
+        return live_snapshot(request)
+    st = REGISTRY.get(cid)
+    if st is None:
+        raise HTTPException(404, "no such campaign")
+    return clean(Campaign.from_state(st).snapshot())
+
+
+@router.post("/api/campaigns/{cid}/activate")
+def campaign_activate(cid: str) -> dict:
+    c = activate_campaign(cid)
+    return {"ok": True, "id": c.id, "name": c.policy.name}

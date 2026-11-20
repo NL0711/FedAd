@@ -14,9 +14,11 @@ Addresses
 
 - [ ] Open https://fedad.onrender.com/healthz. The free server sleeps, so the first load can take about a minute. Expect `{"ok":true}`.
 - [ ] Render logs show `PERSIST on` (the model is saved to Supabase and survives restarts).
-- [ ] Admin console, Campaign page, start a new campaign (clears old test devices). Model version reads 0.
+- [ ] Admin console, top-right dropdown, **New campaign…**: give it a name (for example "Reviewer demo") and create it. The previous campaign,
+      with its synthetic or test data, is kept in the dropdown and the new one starts at model version 0. Devices from the old campaign
+      rejoin by themselves within a minute or two.
 - [ ] Build and load the extension: `cd extension; npm install; npm run build`, then `chrome://extensions`, Developer mode, Load unpacked, pick `extension/dist`.
-- [ ] Pin the extension. Do one practice run of section B in a separate browser profile, then start a new campaign again.
+- [ ] Pin the extension. Do one practice run of section B in a separate browser profile, then create a fresh campaign again.
 
 ## B. Live walkthrough (about 10 minutes)
 

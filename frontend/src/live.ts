@@ -1,8 +1,9 @@
 // Live campaign (real phones): types, API calls and a polling hook. Backend: backend/src/fedad/web/live.py.
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { Num } from "./types";
 
 export interface CampaignPolicy {
+  name?: string;
   eps_total: number;
   max_uploads: number;
   buffer_k: number;
@@ -57,7 +58,34 @@ export interface UploadRec {
   n: number; loss_before: number; loss_after: number; vec: number[]; before: number[]; after: number[];
 }
 
+export interface CampaignSummary {
+  id: string;
+  name: string;
+  created: number;
+  active: boolean;
+  version: number;
+  devices: number;
+  updates: number;
+  eps_total: number;
+  dp: boolean;
+  max_uploads: number;
+  buffer_k: number;
+}
+
+/** Which campaign the pages show. `viewId` is the one being looked at; `activeId` is the one collecting updates. */
+export interface CampaignView {
+  items: CampaignSummary[];
+  activeId: string;
+  viewId: string;
+  setViewId: (id: string) => void;
+  refresh: () => void;
+}
+export const CampaignContext = createContext<CampaignView>({ items: [], activeId: "", viewId: "", setViewId: () => {}, refresh: () => {} });
+export const useCampaigns = () => useContext(CampaignContext);
+
 export interface LiveSnapshot {
+  id: string;
+  name: string;
   model: { names: string[]; weights: number[]; uploads: UploadRec[] };
   policy: { sigma: number; eps_per_upload: number; max_uploads: number; eps_total: number; clip_c: number };
   campaign: CampaignPolicy;
@@ -65,7 +93,7 @@ export interface LiveSnapshot {
   devices: LiveDevice[];
   events: LiveEvent[];
   insights: LiveInsights;
-  join: { code: string; urls: string[]; lan_enabled: boolean };
+  join?: { code: string; urls: string[]; lan_enabled: boolean };
   created: number;
 }
 
@@ -83,20 +111,24 @@ async function asJson<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export const getLive = () => fetch("/api/live").then((r) => asJson<LiveSnapshot>(r));
+export const getLive = (id?: string) => fetch(id ? `/api/campaigns/${id}` : "/api/live").then((r) => asJson<LiveSnapshot>(r));
 
-export const resetCampaign = (p: CampaignPolicy) =>
-  fetch("/api/live/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) }).then((r) =>
-    asJson<{ ok: boolean; join_code: string }>(r),
-  );
+const post = (url: string, body?: unknown) =>
+  fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 
-/** Polls the campaign every ``ms`` while mounted. */
+export const listCampaigns = () => fetch("/api/campaigns").then((r) => asJson<{ active: string; items: CampaignSummary[] }>(r));
+export const createCampaign = (p: CampaignPolicy) => post("/api/campaigns", p).then((r) => asJson<{ ok: boolean; id: string; name: string }>(r));
+export const activateCampaign = (id: string) => post(`/api/campaigns/${id}/activate`).then((r) => asJson<{ ok: boolean; id: string }>(r));
+
+/** Polls the campaign being viewed every ``ms`` while mounted: the active one, or a saved one chosen in the header. */
 export function useLive(ms = 1500): { snap: LiveSnapshot | null; error: string | null; refresh: () => void } {
+  const { viewId, activeId } = useCampaigns();
+  const id = viewId && viewId !== activeId ? viewId : undefined;      // the active campaign is read from /api/live
   const [snap, setSnap] = useState<LiveSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
   const tick = () =>
-    getLive()
+    getLive(id)
       .then((s) => {
         if (alive.current) {
           setSnap(s);
@@ -106,6 +138,7 @@ export function useLive(ms = 1500): { snap: LiveSnapshot | null; error: string |
       .catch((e: Error) => alive.current && setError(e.message));
   useEffect(() => {
     alive.current = true;
+    setSnap(null);
     tick();
     const t = window.setInterval(tick, ms);
     return () => {
@@ -113,7 +146,7 @@ export function useLive(ms = 1500): { snap: LiveSnapshot | null; error: string |
       clearInterval(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ms]);
+  }, [ms, id]);
   return { snap, error, refresh: tick };
 }
 

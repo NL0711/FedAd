@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .env
+.env.local
 results/
 # the small precomputed results the deployed image serves (Dockerfile copies it)
 !deploy/results/
