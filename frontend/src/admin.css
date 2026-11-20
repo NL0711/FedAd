@@ -1,48 +1,40 @@
-/* Ad-admin console additions: campaign, insights, benefit. Follows styles.css tokens. */
+/* Admin and advertiser consoles. Follows styles.css tokens. */
 
-/* Explanations are hidden unless Notes is on: the presenter does the explaining. Errors and warnings stay visible. */
-body:not(.notes) .lede, body:not(.notes) .note, body:not(.notes) .hint, body:not(.notes) .notice-info { display: none; }
-.notes-btn { font: inherit; font-weight: 700; border: 2px solid var(--ink); background: #fff; padding: 0.15rem 0.7rem; cursor: pointer; }
-body.notes .notes-btn { background: var(--ink); color: #fff; }
+.notes-btn { font: inherit; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 99px; background: #fff; padding: 0.35rem 1rem; cursor: pointer; color: var(--ink); }
+.notes-btn:hover { background: var(--soft); }
 
 .pickchip { font: inherit; cursor: pointer; background: #fff; }
 .legend2 { display: flex; gap: 0.5rem; align-items: center; font-size: 0.95rem; margin-top: 0.3rem; }
 .legend2 span { display: inline-block; width: 14px; height: 14px; border-radius: 2px; margin-left: 0.6rem; }
-.sv-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-.sv-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-bottom: 1.25rem; }
-.sv-col { margin: 0; }
-.sv-n { font-size: 3.4rem; font-weight: 800; line-height: 1; letter-spacing: -0.03em; margin: 0.2rem 0 0.6rem; }
-.sv-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.sv-chip { border: 2px solid var(--line); padding: 0.1rem 0.6rem; border-radius: 99px; font-weight: 600; font-size: 0.95rem; }
-.sv-chip.hot { background: #fde4e0; border-color: #c0392b; color: #7a1f14; }
-.sv-none { color: var(--muted); }
-.sv-table { font-size: 0.95rem; }
-.sv-ua { max-width: 14rem; font-size: 0.85rem; color: var(--muted); }
-.sv-body { font-family: ui-monospace, Consolas, monospace; font-size: 0.8rem; max-width: 22rem; word-break: break-all; }
-nav .sep { align-self: center; width: 2px; height: 1.6rem; background: var(--line); margin: 0 0.5rem; }
-nav button.research { background: #fff; }
-nav button.research[aria-selected="true"] { background: var(--ink); }
+.sv-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sv-chip { border: 1px solid var(--line); background: #fff; padding: 0.2rem 0.8rem; border-radius: 99px; font-weight: 600; font-size: 0.9rem; }
+.sv-chip.hot { background: #e0f2fe; border-color: var(--blue); color: #075985; }
 
-.join { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start; }
-.code { font-size: 2.6rem; font-weight: 800; letter-spacing: 0.18em; font-variant-numeric: tabular-nums; }
-.url { display: block; word-break: break-all; font-size: 1rem; padding: 0.3rem 0.5rem; }
-.meter { height: 12px; background: #e5e7eb; border: 1px solid var(--line); }
-.meter > i { display: block; height: 100%; background: var(--blue); }
-ul.feed { list-style: none; padding-left: 0; }
-ul.feed li { padding: 0.3rem 0; border-bottom: 1px solid #e5e7eb; }
+.meter { height: 8px; border-radius: 99px; background: var(--soft); overflow: hidden; min-width: 7rem; }
+.meter > i { display: block; height: 100%; background: var(--blue); border-radius: 99px; }
+.meter-label { font-size: 0.85rem; color: var(--muted); }
+ul.feed { list-style: none; padding-left: 0; margin: 0; }
+ul.feed li { display: flex; gap: 0.9rem; align-items: baseline; padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
+ul.feed li:last-child { border-bottom: none; }
+ul.feed .time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 5.5rem; }
+ul.feed strong { margin-left: auto; color: var(--blue); }
+ul.feed .muted { margin-left: auto; }
+
+.extremes { display: grid; gap: 1rem; }
+.extremes > div { display: grid; grid-template-columns: 5rem 1fr auto; gap: 0.8rem; align-items: baseline; }
+.extremes > div > span:last-child { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .heat-wrap { overflow-x: auto; }
 table.heat { width: auto; min-width: 100%; border-collapse: separate; border-spacing: 3px; }
-table.heat th { background: none; border: none; font-size: 0.95rem; text-align: center; white-space: nowrap; }
+table.heat th { background: none; border: none; font-size: 0.9rem; text-align: center; white-space: nowrap; text-transform: none; letter-spacing: 0; color: var(--ink); }
 table.heat th[scope="row"] { text-align: right; padding-right: 0.7rem; }
-table.heat td { border: none; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; padding: 0.7rem 0.4rem; min-width: 4.4rem; }
-table.heat td.best { outline: 4px solid var(--orange); outline-offset: -4px; }
+table.heat td { border: none; border-radius: 6px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; padding: 0.75rem 0.4rem; min-width: 4.4rem; }
+table.heat td.best { outline: 3px solid var(--orange); outline-offset: -3px; }
 
-.bars h4 { margin: 0.4rem 0 0.4rem; font-size: 1.05rem; }
-.bar-row { display: grid; grid-template-columns: 8.5rem 1fr 4.2rem; gap: 0.6rem; align-items: center; margin: 0.28rem 0; }
-.bar-row.wide { grid-template-columns: 15rem 1fr 10.5rem; }
-.bar-name { font-size: 1rem; }
-.bar-track { position: relative; height: 1.15rem; background: #eef0f3; border: 1px solid var(--line); }
-.bar-track > i { position: absolute; left: 0; top: 0; bottom: 0; }
-.bar-track > b { position: absolute; top: -4px; bottom: -4px; width: 3px; background: var(--ink); }
-.bar-val { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; font-size: 0.98rem; }
+.bars h4 { margin: 0.6rem 0 0.5rem; font-size: 1rem; color: var(--muted); }
+.bar-row { display: grid; grid-template-columns: 8.5rem 1fr 4.2rem; gap: 0.8rem; align-items: center; margin: 0.4rem 0; }
+.bar-name { font-size: 0.95rem; }
+.bar-track { position: relative; height: 0.9rem; background: var(--soft); border-radius: 99px; }
+.bar-track > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
+.bar-track > b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); }
+.bar-val { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; font-size: 0.95rem; }

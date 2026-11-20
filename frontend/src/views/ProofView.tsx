@@ -26,7 +26,7 @@ export default function ProofView() {
   if (error && !snap) return <Notice kind="error" title="Cannot reach the backend">{error}</Notice>;
   if (!snap) return <p className="loading">Loading…</p>;
   const ups = snap.model.uploads;
-  if (!ups.length) return <><h2>Model</h2><Card title="Waiting for an update"><p className="loading">Contribute from a phone</p></Card></>;
+  if (!ups.length) return <><h2>Model</h2><Card title="Waiting for an update"><p className="empty">No update received yet.</p></Card></>;
   const u = ups[Math.min(pick, ups.length - 1)];
   const names = snap.model.names;
   const step = u.after.map((w, i) => w - u.before[i]);
@@ -38,7 +38,7 @@ export default function ProofView() {
       <div className="metrics" style={{ marginBottom: "1.25rem" }}>
         <Metric label="Global model" value={`v${snap.status.version}`} sub={`${snap.model.uploads.length} updates received`} />
         <Metric label="Update received" value={`${u.bytes} B`} sub={`checksum ${hex(u.checksum)}`} />
-        <Metric label="Update size" value={u.norm.toFixed(2)} sub={`from device #${u.device}, ${ago(u.t)}`} />
+        <Metric label="From" value={`Device #${u.device}`} sub={ago(u.t)} />
         <Metric label="Global weights moved" value={u.step_norm.toFixed(3)} sub={u.stepped ? `now v${u.version}` : "queued"} />
       </div>
 
