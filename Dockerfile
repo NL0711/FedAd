@@ -8,7 +8,7 @@ RUN npm run build
 
 FROM python:3.12-slim
 WORKDIR /app
-RUN pip install --no-cache-dir numpy fastapi "uvicorn[standard]"
+RUN pip install --no-cache-dir numpy fastapi "uvicorn[standard]" "pyjwt[crypto]"
 COPY backend/pyproject.toml backend/README.md ./backend/
 COPY backend/src ./backend/src
 RUN pip install --no-cache-dir --no-deps ./backend

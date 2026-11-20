@@ -61,52 +61,65 @@ def test_small_overlap_trains_nothing(c):
     assert r["status"] == "too_small" and r["overlap"] is None and "test_auc" not in r
 
 
-def test_login_sessions_and_roles(c, monkeypatch):
+BASE = "https://proj.supabase.co"
+
+
+@pytest.fixture()
+def supabase(monkeypatch):
+    """A throwaway signing key stands in for the Supabase project's; auth._signing_key returns its public half."""
+    import time
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import ec
     from fedad.web import auth
-    monkeypatch.setenv("FEDAD_ADMIN_USER", "platform")
-    monkeypatch.setenv("FEDAD_ADMIN_PASSWORD", "p-admin")
-    monkeypatch.setenv("FEDAD_B_USER", "advertiser")
-    monkeypatch.setenv("FEDAD_B_PASSWORD", "p-b")
+    key, other = ec.generate_private_key(ec.SECP256R1()), ec.generate_private_key(ec.SECP256R1())
+    monkeypatch.setenv("SUPABASE_URL", BASE)
+    monkeypatch.setattr(auth, "_signing_key", lambda token: key.public_key())
     monkeypatch.setattr(appmod, "OPEN_ADMIN", False)
-    auth._ATTEMPTS.clear()
-    anon = {"x-forwarded-for": "9.9.9.9"}
-    assert c.post("/auth/login", json={"username": "advertiser", "password": "nope"}, headers=anon).status_code == 401
-    r = c.post("/auth/login", json={"username": "advertiser", "password": "p-b"}, headers=anon)
-    assert r.status_code == 200 and r.json() == {"role": "advertiser", "next": "/advertiser.html"}
-    assert "httponly" in r.headers["set-cookie"].lower()
-    assert c.get("/api/b/vertical", headers=anon).status_code == 200            # cookie kept by the client
-    assert c.get("/api/live", headers=anon).status_code == 403                  # advertiser cannot see per-device data
-    assert c.get("/auth/me").json()["role"] == "advertiser"
-    c.post("/auth/logout")
-    c.cookies.clear()
-    assert c.get("/api/b/vertical", headers=anon).status_code == 403
-    r = c.post("/auth/login", json={"username": "platform", "password": "p-admin"}, headers=anon)
-    assert r.json()["next"] == "/" and c.get("/api/live", headers=anon).status_code == 200
-    c.cookies.clear()
-    c.cookies.set(auth.COOKIE, "forged.token")
-    assert c.get("/api/live", headers=anon).status_code == 403
+
+    def token(role="admin", exp=3600, aud="authenticated", iss=BASE + "/auth/v1", signer=None, meta=None):
+        claims = {"sub": "u1", "aud": aud, "iss": iss, "exp": int(time.time()) + exp,
+                  "app_metadata": meta if meta is not None else ({"role": role} if role else {}), "user_metadata": {"role": "admin"}}
+        return jwt.encode(claims, signer or key, algorithm="ES256")
+    token.other = other
+    return token
 
 
-def test_login_is_rate_limited(c, monkeypatch):
-    from fedad.web import auth
-    monkeypatch.setenv("FEDAD_B_USER", "advertiser")
-    monkeypatch.setenv("FEDAD_B_PASSWORD", "p-b")
-    auth._ATTEMPTS.clear()
-    h = {"x-forwarded-for": "8.8.8.8"}
-    codes = [c.post("/auth/login", json={"username": "x", "password": "y"}, headers=h).status_code for _ in range(auth.MAX_ATTEMPTS + 1)]
-    assert codes[-1] == 429 and set(codes[:-1]) == {401}
-    assert c.post("/auth/login", json={"username": "advertiser", "password": "p-b"}, headers=h).status_code == 429
+ANON = {"x-forwarded-for": "9.9.9.9"}                                  # a proxied request is never local
+
+
+def _h(tok):
+    return {**ANON, "authorization": f"Bearer {tok}"}
+
+
+def test_supabase_roles(c, supabase):
+    assert c.get("/api/b/vertical", headers=ANON).status_code == 403                      # no token
+    assert c.get("/api/b/vertical", headers=_h(supabase("advertiser"))).status_code == 200
+    assert c.get("/api/live", headers=_h(supabase("advertiser"))).status_code == 403      # advertiser cannot see per-device data
+    assert c.get("/api/live", headers=_h(supabase("admin"))).status_code == 200
+    assert c.get("/api/b/vertical", headers=_h(supabase("admin"))).status_code == 200     # platform may also open the B endpoints
+
+
+def test_supabase_rejects_bad_tokens(c, supabase):
+    assert c.get("/api/live", headers=_h(supabase("admin", exp=-10))).status_code == 403                    # expired
+    assert c.get("/api/live", headers=_h(supabase("admin", aud="anon"))).status_code == 403                 # wrong audience
+    assert c.get("/api/live", headers=_h(supabase("admin", iss="https://evil.supabase.co/auth/v1"))).status_code == 403
+    assert c.get("/api/live", headers=_h(supabase("admin", signer=supabase.other))).status_code == 403      # signed by another key
+    assert c.get("/api/live", headers=_h(supabase(role=None))).status_code == 403                           # signed in, no role
+    # user_metadata is editable by the user, so a role there must never count (the helper puts role=admin in it)
+    assert c.get("/api/live", headers=_h(supabase(role=None, meta={}))).status_code == 403
+    assert c.get("/api/live", headers=_h("not.a.jwt")).status_code == 403
+
+
+def test_no_supabase_url_means_no_roles(c, supabase, monkeypatch):
+    monkeypatch.delenv("SUPABASE_URL")
+    assert c.get("/api/live", headers=_h(supabase("admin"))).status_code == 403
 
 
 def test_access_rules(c, monkeypatch):
     anon = {"x-forwarded-for": "1.2.3.4"}                      # a proxied request is never local
     monkeypatch.setattr(appmod, "OPEN_ADMIN", False)
-    monkeypatch.setattr(appmod, "B_KEY", "bkey")
-    monkeypatch.setattr(appmod, "ADMIN_KEY", "akey")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
     assert c.get("/api/b/vertical", headers=anon).status_code == 403
-    assert c.get("/api/b/vertical", headers={**anon, "x-admin-key": "bkey"}).status_code == 200
-    assert c.get("/api/live", headers={**anon, "x-admin-key": "bkey"}).status_code == 403      # advertiser cannot see per-device data
-    assert c.get("/api/live", headers={**anon, "x-admin-key": "akey"}).status_code == 200
     monkeypatch.setattr(appmod, "OPEN_ADMIN", True)
     assert c.get("/api/b/vertical", headers=anon).status_code == 200
     assert c.get("/api/live", headers=anon).status_code == 403                                  # open demo never opens the rest

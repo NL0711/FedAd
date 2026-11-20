@@ -157,30 +157,22 @@ _LOCAL = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
 OPEN_ADMIN = os.environ.get("FEDAD_OPEN_ADMIN") == "1"      # DEMO ONLY: opens the aggregate-only advertiser endpoints (/api/b/*), nothing else
-ADMIN_KEY = os.environ.get("FEDAD_ADMIN_KEY", "")           # platform operator: full /api/* with header X-Admin-Key
-B_KEY = os.environ.get("FEDAD_B_KEY", "")                   # advertiser (Party B): /api/b/* only, header X-Admin-Key
-
-
-def _key_ok(request: Request, key: str) -> bool:
-    given = request.headers.get("x-admin-key", "")
-    return bool(key) and hmac.compare_digest(given.encode(), key.encode())
 
 
 @app.middleware("http")
 async def admin_is_local_only(request: Request, call_next):
     """Access rules for /api/*. Phones and the extension use /v1/* and the static pages, which are not affected.
       full admin (per-device ledger, update vectors, shop request log, campaign reset, benchmark runs):
-          localhost (and no proxy header), or a signed-in platform account (/auth/login), or X-Admin-Key == FEDAD_ADMIN_KEY (scripts).
-      advertiser endpoints (/api/b/*, aggregates only): the above, or a signed-in advertiser account, or X-Admin-Key == FEDAD_B_KEY,
-          or anyone if FEDAD_OPEN_ADMIN=1.
+          localhost (and no proxy header), or a Supabase user whose app_metadata.role is "admin" (web/auth.py).
+      advertiser endpoints (/api/b/*, aggregates only): the above, or role "advertiser", or anyone if FEDAD_OPEN_ADMIN=1.
     A request that came through a proxy (X-Forwarded-For) is never treated as local."""
     path = request.url.path
     if path.startswith("/api"):
         local = request.client is not None and request.client.host in _LOCAL and "x-forwarded-for" not in request.headers
         role = auth.role_of(request)
-        full = local or role == "admin" or _key_ok(request, ADMIN_KEY)
+        full = local or role == "admin"
         if path.startswith("/api/b/"):
-            allowed = full or role == "advertiser" or _key_ok(request, B_KEY) or OPEN_ADMIN
+            allowed = full or role == "advertiser" or OPEN_ADMIN
         else:
             allowed = full
         if not allowed:
@@ -196,7 +188,6 @@ def healthz() -> dict:
 app.include_router(live.router)
 app.include_router(shop.router)
 app.include_router(vertical_api.router)
-app.include_router(auth.router)
 
 
 @app.get("/api/health")

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { signOutAndGo } from "./supabase";
 import ServerView from "./views/ServerView";
 import Campaign from "./views/Campaign";
 import ProofView from "./views/ProofView";
@@ -47,7 +48,7 @@ export default function App() {
         <div className="app-title">
           <h1>FedAd · Ad admin</h1>
           <span className="badge">Prototype</span>
-          <button className="notes-btn" onClick={() => fetch("/auth/logout", { method: "POST" }).finally(() => location.replace("/login.html"))}>Sign out</button>
+          <button className="notes-btn" onClick={() => void signOutAndGo()}>Sign out</button>
           <button className="notes-btn" aria-pressed={notes} onClick={() => { setNotes(!notes); document.body.classList.toggle("notes"); }}>Notes</button>
         </div>
         <nav role="tablist" aria-label="Views">

@@ -1,20 +1,31 @@
+import { roleOf, supabase } from "./supabase";
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const NEXT = { admin: "/", advertiser: "/advertiser.html" } as const;
+
+// Already signed in with a role: go straight to that console.
+void supabase.auth.getSession().then(({ data }) => {
+  const role = roleOf(data.session?.user);
+  if (role) location.replace(NEXT[role]);
+});
 
 $<HTMLFormElement>("f").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const btn = $<HTMLButtonElement>("b");
   btn.disabled = true;
   $("err").textContent = "";
-  try {
-    const r = await fetch("/auth/login", {
-      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-      body: JSON.stringify({ username: $<HTMLInputElement>("u").value, password: $<HTMLInputElement>("p").value }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.detail ?? "Sign in failed");
-    location.replace(body.next);
-  } catch (e) {
-    $("err").textContent = (e as Error).message;
+  const { data, error } = await supabase.auth.signInWithPassword({ email: $<HTMLInputElement>("u").value.trim(), password: $<HTMLInputElement>("p").value });
+  if (error || !data.user) {
+    $("err").textContent = error?.message ?? "Sign in failed";
     btn.disabled = false;
+    return;
   }
+  const role = roleOf(data.user);
+  if (!role) {
+    await supabase.auth.signOut();
+    $("err").textContent = "This account has no access to a console. Ask the project owner to give it a role.";
+    btn.disabled = false;
+    return;
+  }
+  location.replace(NEXT[role]);
 });

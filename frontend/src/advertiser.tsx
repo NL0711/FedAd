@@ -3,6 +3,7 @@ import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, Metric, Notice } from "./components";
+import { accessToken, signOutAndGo } from "./supabase";
 import "./styles.css";
 import "./admin.css";
 
@@ -16,7 +17,8 @@ interface Last {
 interface Vertical { platform_profiles: number; advertiser_customers: number; min_cohort: number; last: Last | null }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, { ...init, headers: { "Content-Type": "application/json" }, credentials: "same-origin" });
+  const token = await accessToken();
+  const r = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
   if (r.status === 403) {
     location.replace("/login.html");
     throw new Error("Sign in required");
@@ -45,7 +47,7 @@ function Console() {
   return (
     <>
       <header className="app-header"><div className="app-title"><h1>FedAd · Advertiser (Party B)</h1><span className="badge">Prototype</span>
-        <button className="notes-btn" onClick={() => fetch("/auth/logout", { method: "POST" }).finally(() => location.replace("/login.html"))}>Sign out</button></div></header>
+        <button className="notes-btn" onClick={() => void signOutAndGo()}>Sign out</button></div></header>
       <main>
         {err && <Notice kind="error">{err}</Notice>}
         <Notice title="What you can and cannot see">

@@ -8,7 +8,7 @@ dependencies = ["numpy>=1.24"]
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx", "dp-accounting"]
 flower = ["flwr>=1.44", "ray>=2.31"]          # Flower runtime for the federated rounds (fedad.flower_engine)
-web = ["fastapi", "uvicorn", "pydantic>=2"]    # dashboard API (python -m fedad.web)
+web = ["fastapi", "uvicorn", "pydantic>=2", "pyjwt[crypto]"]   # dashboard API (python -m fedad.web)
 plots = ["matplotlib>=3.8"]                    # report figures (python -m fedad.experiments)
 all = ["fedad[dev,flower,web,plots]", "torch"]
 deep = ["torch>=2.2"]

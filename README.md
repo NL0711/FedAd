@@ -35,7 +35,12 @@ python -m fedad.demo --deep             # older single-seed table -> results/dem
 
 1. Commit and push this repo to GitHub (the Criteo data stays out; `deploy/results/` ships the aggregate results the console shows).
 2. Render: New, Blueprint, pick the repo. `render.yaml` and the `Dockerfile` do the rest (builds the React pages, runs FastAPI).
-3. Sign-in: `render.yaml` sets two accounts (`platform`, `advertiser`) and makes Render generate their passwords (`FEDAD_ADMIN_PASSWORD`, `FEDAD_B_PASSWORD`; read them in the service's Environment tab, give the advertiser only theirs). `/login.html` signs in and sends each account to its console; the advertiser account can only reach the aggregate-only endpoints. Localhost needs no sign-in. (`FEDAD_OPEN_ADMIN=1` opens just the advertiser endpoints, for a login-free demo.)
+3. Sign-in is Supabase Auth (no passwords on Render). Create the users in Supabase (Authentication, Users), then give each a role with SQL in the SQL Editor (`app_metadata` cannot be edited by the user, unlike `user_metadata`):
+   ```sql
+   update auth.users set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'      where email = 'you@example.com';
+   update auth.users set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"advertiser"}' where email = 'advertiser@example.com';
+   ```
+   `/login.html` signs in and sends each role to its console; the backend (`web/auth.py`) checks the token against the project's public keys using `SUPABASE_URL` only. `advertiser` can only reach the aggregate-only endpoints. Localhost needs no sign-in. Local settings go in `backend/.env` (git-ignored; see `.env.example`); never put the Supabase secret key in this project. (`FEDAD_OPEN_ADMIN=1` opens just the advertiser endpoints, for a login-free demo.)
 4. Platform console: `https://<service>.onrender.com/`. Advertiser (Party B) console: `/advertiser.html`. Phone shop: `/phone.html`. Browser extension: `extension/` (`npm run build`, load `dist` unpacked in Chrome or Edge). Vertical FL (PSI plus split model): `backend/src/fedad/vertical/`, service in `web/vertical_api.py`.
 
 Free instances sleep after idle time and lose all state on restart (campaign, accounts, model): wake it before the demo. The shop keeps
